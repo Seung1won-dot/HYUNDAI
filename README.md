@@ -38,7 +38,7 @@
 
 | Pleos Connect SDK | 용도 |
 |---|---|
-| Vehicle SDK | 주차 브레이크, 문, 창문, 라이트, 타이어, 연료·배터리, 주행거리 |
+| Vehicle SDK | 기어(P단 주차 감지), 문, 창문, 라이트, 타이어·경고등, 연료·배터리, 주행가능거리, 주행거리 |
 | SpeechToText SDK | 주차 메모, 장소 핀, 음성 명령 |
 | TextToSpeech SDK | 주차 확인 질문, 탑승 브리핑 |
 | FusedLocation SDK | 주차·장소 좌표, 자주 가는 주차장 판별 |
@@ -48,20 +48,43 @@
 
 ## ▶️ 실행 방법
 
-> 🚧 개발 진행 중입니다. 차량 앱 프로젝트가 추가되면 이 섹션을 업데이트합니다.
+### 1. 준비
+1. [Android Studio](https://developer.android.com/studio)를 설치합니다.
+2. Pleos Connect 전용 에뮬레이터(AVD)를 설치하고 실행합니다. ([설치 가이드](https://document.pleos.ai/docs/connect/guide/getting-started/application-development/setup-connect-sdk-emulator))
 
-### APK로 실행
-1. Pleos Connect 전용 에뮬레이터(AVD)를 실행합니다. ([설치 가이드](https://document.pleos.ai/docs/connect/guide/getting-started/application-development/setup-connect-sdk-emulator))
-2. `apk/` 폴더의 APK를 설치합니다.
-   ```bash
-   adb install apk/<팀명>_차곡차곡_release.apk
-   ```
-3. 런처에서 **차곡차곡**을 실행합니다.
+### 2. APK로 실행
+```bash
+adb install apk/차곡차곡_차곡차곡_release.apk
+```
+런처에서 **차곡차곡**을 실행합니다.
 
-### 소스에서 빌드
+### 3. 소스에서 빌드
+Android Studio에서 이 저장소 폴더를 열고 실행(▶)하거나, 터미널에서 빌드합니다. (JDK 17 필요)
 ```bash
 ./gradlew assembleRelease
 ```
+```bash
+./gradlew testDebugUnitTest
+```
+빌드 결과는 `app/build/outputs/apk/release/app-release.apk`에 생깁니다.
+
+### 4. 써 보기
+- **차량 제어판(Pleos 에뮬레이터)** 에서 기어를 D → P로 바꾸면 차가 "주차 위치를 남길까요?"라고 묻습니다.
+- 차량 없이 흐름만 볼 때는 화면 오른쪽 위 **테스트 패널**을 켜고 `기어 D` → `기어 P`를 누릅니다. 창문·라이트·타이어·연료 상태도 바꿔 볼 수 있습니다.
+- 음성 인식을 쓸 수 없는 환경에서는 질문 화면에서 직접 입력해 저장합니다.
+
+### 현재 구현 범위 (1단계 프로토타입)
+| 기능 | 상태 |
+|---|---|
+| P단 진입 감지 → 차가 먼저 질문 | ✅ |
+| 음성 메모(STT) → 주차 카드 저장 (운전자, 시각, 좌표, 차 상태) | ✅ |
+| 내릴 때 점검 (창문, 라이트) | ✅ |
+| 탑승 브리핑, 3단계 등급 규칙표 | ✅ |
+| 운전 중 상태 이상 음성 한 줄 안내 | ✅ |
+| 원본 음성 보관, 건물명 자동 인식, 자주 가는 주차장 | 🚧 2단계 |
+| 가족 연결(QR·웹앱), 장소 핀·길 안내 | 🚧 2단계 |
+
+> ✅는 코드 구현과 빌드·단위 테스트 통과 기준입니다. Pleos 에뮬레이터에서의 실제 차량 값·음성 동작 검증은 진행 중입니다.
 
 ---
 
@@ -69,7 +92,9 @@
 
 | 항목 | 버전 / 내용 |
 |---|---|
-| 실행 환경 | Pleos Connect 전용 AVD (Pleos_Connect_v2.1, Android 14) |
+| 실행 환경 | Pleos Connect Emulator 2.1.0 (Android 14, API 34) |
+| 화면 규격 | 가로 화면 기준 (에뮬레이터 검증 후 해상도 기재 예정) |
+| Pleos SDK | Vehicle 2.3.2, SpeechToText 3.3.1, TextToSpeech 3.3.1, FusedLocation 1.1.3, NaviHelper 3.0.5 |
 | 최소 Android API | 28 이상 |
 | 개발 언어 | Kotlin |
 | JDK | 17 |
@@ -81,6 +106,7 @@
 ## 📦 APK 위치
 
 - 저장소 내 [`apk/`](apk/) 폴더
+- 현재 파일: [`apk/차곡차곡_차곡차곡_release.apk`](apk/차곡차곡_차곡차곡_release.apk)
 - 파일명 규칙: `팀명_앱이름_release.apk`
 - 용량 초과 시 GitHub Releases에 등록하고 링크를 이곳에 기재합니다.
 
@@ -91,9 +117,18 @@
 ```
 ├── README.md
 ├── docs/        기획 문서, 화면 시안, 시나리오
+├── ideas/       아이디어 공유
 ├── apk/         release APK
 ├── web/         가족 웹앱 (PWA)
-└── (차량 앱 Android 프로젝트 · 추가 예정)
+└── app/         차량 앱 (Android · Kotlin · Jetpack Compose)
+    └── src/main/java/com/chagok/car/
+        ├── vehicle/   Pleos Vehicle SDK 연결 (차 상태)
+        ├── voice/     말하기(TTS), 듣기(STT)
+        ├── location/  주차 좌표 (FusedLocation)
+        ├── parking/   주차 감지, 메모 문장 처리
+        ├── briefing/  등급 규칙표, 브리핑 문장
+        ├── data/      주차 카드 저장
+        └── ui/        화면
 ```
 
 ## 🗓️ 개발 일정

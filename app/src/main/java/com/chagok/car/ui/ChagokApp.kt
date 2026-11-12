@@ -250,14 +250,20 @@ private fun Note(card: ParkingCard?, carName: String, modifier: Modifier = Modif
         )
         Spacer(Modifier.height(20.dp))
         Box(Modifier.width(72.dp).height(4.dp).background(TextHi))
+        // 다음 사람에게 남긴 한마디. 차 상태보다 먼저, 사람의 말로 보여 준다.
+        card.word?.let {
+            Spacer(Modifier.height(20.dp))
+            Text("“$it”", fontSize = 32.sp, lineHeight = 42.sp, fontWeight = Semi, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
         Spacer(Modifier.height(24.dp))
         // 넘겨받는 사람이 알아야 할 것을 숫자 표가 아니라 문장으로 적는다. 네 줄까지만.
         val left = card.rangeKm?.let { "약 ${it.toInt()}km 갈 수 있어요" } ?: card.fuelPercent?.let { "연료가 $it% 남았어요" }
         val lines = card.issues.map { Warn to IssueHistory.label(it) } +
             listOfNotNull(left?.let { (if (card.issues.isEmpty()) Ok else TextMid) to it })
         if (card.issues.isEmpty() && left == null) Mark(Ok, "차는 이상 없이 두고 갔어요")
-        lines.take(4).forEachIndexed { i, (color, text) ->
-            val more = if (i == 3 && lines.size > 4) " 외 ${lines.size - 4}건" else ""
+        val room = if (card.word == null) 4 else 3
+        lines.take(room).forEachIndexed { i, (color, text) ->
+            val more = if (i == room - 1 && lines.size > room) " 외 ${lines.size - room}건" else ""
             Mark(color, text + more)
         }
     }
@@ -463,7 +469,7 @@ private fun AskScreen(asking: Prompt.Asking, driving: Boolean, vm: ChagokViewMod
 private fun askHint(asking: Prompt.Asking) = when (asking.kind) {
     Ask.PARKING -> if (asking.suggestion != null) "“응”이라고 하거나, 다른 자리면 그대로 말해 주세요" else "예: “지하 2층 B구역 기둥 14”"
     Ask.PARKING_WHERE -> "예: “지하 2층 B구역 기둥 14”"
-    Ask.COMMAND -> "예: “여기 다음에 오자”, “그 빵집 안내해 줘”"
+    Ask.COMMAND -> "예: “여기 다음에 오자”, “그 빵집 안내해 줘”, “주유했다고 전해 줘”"
     Ask.PLACE_NAME -> "예: “성심당 빵집”"
     Ask.CAR_NAME -> "예: “엄마 차”, “흰색 SUV”. 집에 차가 여러 대일 때 구분하는 이름이에요"
     Ask.MEMBER_NAME -> "예: “아들”, “할머니”"
@@ -494,7 +500,7 @@ private fun TestPanel(car: CarState, testPlace: String?, vm: ChagokViewModel) {
         ChagokViewModel.TEST_PLACES.keys.forEach { name ->
             TestChip("위치 $name", testPlace == name) { vm.testPlace(name) }
         }
-        listOf("여기 빵집으로 저장해 줘", "그 빵집 안내해 줘").forEach { say ->
+        listOf("여기 빵집으로 저장해 줘", "그 빵집 안내해 줘", "트렁크에 수박 있다고 전해 줘").forEach { say ->
             TestChip("말: $say", false) { vm.testSay(say) }
         }
     }

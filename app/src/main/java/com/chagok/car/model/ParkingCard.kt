@@ -17,4 +17,6 @@ data class ParkingCard(
     val issues: List<String> = emptyList(),
     /** 어느 차의 기록인지 (집에 차가 여러 대일 때 구분). */
     val car: String? = null,
+    /** 다음에 타는 사람에게 남긴 한마디. ("트렁크에 수박 있어") */
+    val word: String? = null,
 )

@@ -9,7 +9,10 @@ object Briefing {
     /** 탈 때: 직전 운전자의 기록 + 지금 차 상태. */
     fun boarding(last: ParkingCard?, state: CarState): String {
         val parts = mutableListOf<String>()
-        if (last != null) parts += "${last.driver}님이 ${last.memo}에 주차했어요."
+        if (last != null) {
+            parts += "${last.driver}님이 ${last.memo}에 주차했어요."
+            last.word?.let { parts += "남긴 말이 있어요. $it." }
+        }
         val issues = CheckRules.drivingIssues(state)
         if (issues.isEmpty()) parts += "차 상태는 이상 없어요."
         else parts += issues.map { it.message }

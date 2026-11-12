@@ -17,6 +17,11 @@ class FamilySettings(context: Context) {
         get() = prefs.getString("members", null)?.split('\n')?.filter { it.isNotBlank() } ?: DEFAULT_MEMBERS
         set(value) = prefs.edit().putString("members", value.joinToString("\n")).apply()
 
+    /** 다음 사람에게 이미 읽어 준 쪽지. 같은 쪽지를 두 번 읽지 않는다. */
+    var handedOverCardId: String?
+        get() = prefs.getString("handedOver", null)
+        set(value) = prefs.edit().putString("handedOver", value).apply()
+
     companion object {
         const val DEFAULT_CAR = "우리 집 차"
         /** 아들·딸·형제를 따로 정하지 않고 '자녀'로 묶어 두고, 필요하면 이름을 더한다. */

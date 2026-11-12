@@ -4,10 +4,10 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
+import com.chagok.car.HandoverService
 
 class MainActivity : ComponentActivity() {
-    private val viewModel: ChagokViewModel by viewModels()
+    private val viewModel: ChagokViewModel by lazy { ChagokViewModel.get(application) }
     private val FUSED_LOCATION = "pleos.car.permission.FUSED_LOCATION"
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -16,6 +16,7 @@ class MainActivity : ComponentActivity() {
         if (checkSelfPermission(FUSED_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(FUSED_LOCATION), 1)
         }
+        HandoverService.start(this)
         setContent { ChagokApp(viewModel) }
     }
 }

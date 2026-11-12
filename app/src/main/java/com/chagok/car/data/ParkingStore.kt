@@ -30,11 +30,21 @@ class ParkingStore(private val file: File) {
         return all
     }
 
+    /** 맨 앞(가장 최근) 카드를 바꿔 저장한다. */
+    fun replaceLatest(card: ParkingCard): List<ParkingCard> {
+        val all = listOf(card) + load().drop(1)
+        val arr = JSONArray()
+        all.forEach { arr.put(toJson(it)) }
+        file.writeText(arr.toString())
+        return all
+    }
+
     private fun toJson(c: ParkingCard) = JSONObject().apply {
         put("id", c.id)
         put("memo", c.memo)
         put("driver", c.driver)
         putOpt("car", c.car)
+        putOpt("word", c.word)
         put("parkedAt", c.parkedAtMillis)
         putOpt("lat", c.latitude)
         putOpt("lng", c.longitude)
@@ -51,6 +61,7 @@ class ParkingStore(private val file: File) {
         memo = o.getString("memo"),
         driver = o.getString("driver"),
         car = if (o.has("car")) o.getString("car") else null,
+        word = if (o.has("word")) o.getString("word") else null,
         parkedAtMillis = o.getLong("parkedAt"),
         latitude = if (o.has("lat")) o.getDouble("lat") else null,
         longitude = if (o.has("lng")) o.getDouble("lng") else null,

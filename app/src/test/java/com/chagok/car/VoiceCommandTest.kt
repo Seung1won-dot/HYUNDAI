@@ -25,6 +25,18 @@ class VoiceCommandTest {
         assertEquals(VoiceCommand.Navigate("학교"), VoiceCommand.parse("학교 가자"))
     }
 
+    @Test fun `전해 줘는 다음 사람에게 남기는 한마디`() {
+        assertEquals(VoiceCommand.LeaveWord("트렁크에 수박 있어"), VoiceCommand.parse("트렁크에 수박 있다고 전해 줘"))
+        assertEquals(VoiceCommand.LeaveWord("주유했어"), VoiceCommand.parse("주유했다고 전해줘."))
+        assertEquals(VoiceCommand.LeaveWord("조금 늦는다"), VoiceCommand.parse("조금 늦는다고 전해 줘"))
+        assertEquals(VoiceCommand.LeaveWord("주유했어"), VoiceCommand.parse("아빠한테 전해 줘, 주유했어"))
+        assertEquals(VoiceCommand.LeaveWord("뒷자리에 우산 있어"), VoiceCommand.parse("쪽지 남겨 줘 뒷자리에 우산 있어"))
+    }
+
+    @Test fun `전할 말 안에 가자나 저장이 있어도 한마디로 받는다`() {
+        assertEquals(VoiceCommand.LeaveWord("내일 마트 가자"), VoiceCommand.parse("내일 마트 가자고 전해 줘"))
+    }
+
     @Test fun `그 밖의 말은 모르는 명령`() {
         assertEquals(VoiceCommand.Unknown, VoiceCommand.parse("오늘 날씨 어때"))
     }

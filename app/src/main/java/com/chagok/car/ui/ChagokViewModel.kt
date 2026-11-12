@@ -1,8 +1,7 @@
 package com.chagok.car.ui
 
 import android.app.Application
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
+import com.chagok.car.briefing.BoardingDetector
 import com.chagok.car.briefing.Briefing
 import com.chagok.car.briefing.CheckRules
 import com.chagok.car.data.FamilySettings
@@ -24,10 +23,15 @@ import com.chagok.car.voice.Listener
 import com.chagok.car.voice.PleosListener
 import com.chagok.car.voice.PleosSpeaker
 import com.chagok.car.voice.Speaker
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -63,7 +67,13 @@ data class UiState(
     val testPlace: String? = null,
 )
 
-class ChagokViewModel(app: Application) : AndroidViewModel(app) {
+/**
+ * 앱의 두뇌. 화면이 떠 있지 않아도(내비를 보고 있어도) 주차와 탑승을 알아채야 하므로
+ * 화면이 아니라 앱 프로세스에 하나만 두고, [com.chagok.car.HandoverService]가 살려 둔다.
+ */
+class ChagokViewModel private constructor(app: Application) {
+
+    private val viewModelScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val hub = CarStateHub()
     private val binder = PleosVehicleBinder(app, hub)
@@ -75,6 +85,12 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
     private val family = FamilySettings(app)
     private val navi = PleosNavi(app)
     private val detector = ParkingDetector()
+    // 앱이 새로 켜졌는데 아직 읽어 주지 않은 쪽지가 있으면, 다음 운전석 문 닫힘을 탑승으로 본다.
+    private val boarding = BoardingDetector(
+        unreadFromBefore = store.load().firstOrNull()?.let { it.id != family.handedOverCardId } ?: false,
+    )
+    /** 주행 중에 "…라고 전해 줘"로 미리 받아 둔 한마디. 다음 쪽지에 붙인다. */
+    private var pendingWord: String? = null
 
     val car: StateFlow<CarState> = hub.state
 
@@ -96,6 +112,13 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
             hub.state.distinctUntilChangedBy { it.gear }.collect { s ->
                 if (detector.onGear(s.gear)) askParking()
                 if (s.isDriving && _ui.value.prompt != Prompt.None) cancelPrompt()
+                if (s.isDriving) boarding.onHandedOver()
+            }
+        }
+        // 다음 사람이 타면(운전석 문이 닫히면) 차가 먼저 쪽지를 읽어 준다.
+        viewModelScope.launch {
+            hub.state.map { DRIVER_DOOR in it.openDoors }.distinctUntilChanged().collect { open ->
+                if (boarding.onDriverDoor(open) && hub.state.value.gear != Gear.DRIVE) playBoardingBriefing()
             }
         }
         // 운전 중 새로 생긴 이상은 음성 한 줄로만 알린다.
@@ -166,6 +189,7 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
     private fun onCommand(command: VoiceCommand) {
         when (command) {
             is VoiceCommand.SavePlace -> command.name?.let { savePin(it) } ?: ask("이곳을 뭐라고 부를까요?", Ask.PLACE_NAME)
+            is VoiceCommand.LeaveWord -> leaveWord(command.text)
             is VoiceCommand.Navigate -> {
                 cancelPrompt()
                 val pin = VoiceCommand.findPin(_ui.value.pins, command.query)
@@ -173,9 +197,28 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
             }
             VoiceCommand.Unknown -> {
                 cancelPrompt()
-                say("잘 못 알아들었어요. 여기 저장해 줘, 또는 빵집 안내해 줘처럼 말해 주세요.")
+                say("잘 못 알아들었어요. 여기 저장해 줘, 빵집 안내해 줘, 주유했다고 전해 줘처럼 말해 주세요.")
             }
         }
+    }
+
+    // ---- 다음 사람에게 한마디 ----
+
+    /** 주차해 둔 상태면 지금 쪽지에 바로 붙이고, 주행 중이면 다음 쪽지에 붙이려고 들고 있는다. */
+    private fun leaveWord(text: String) {
+        cancelPrompt()
+        val latest = _ui.value.cards.firstOrNull()
+        if (hub.state.value.isDriving || latest == null) {
+            pendingWord = text
+            say("주차할 때 쪽지에 같이 남길게요.")
+            return
+        }
+        val all = store.replaceLatest(latest.copy(word = text))
+        _ui.update { it.copy(cards = all) }
+        // 한마디가 새로 붙었으니 다음 사람에게 다시 읽어 줄 수 있게 한다.
+        family.handedOverCardId = null
+        boarding.onParked()
+        say("다음에 타는 분께 전할게요. $text.")
     }
 
     /** 지금 있는 곳을 가족 장소로 저장한다. 위치를 모르면 저장하지 않는다. */
@@ -230,7 +273,10 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
                 rangeKm = state.rangeKm,
                 odometerKm = state.odometerKm,
                 issues = (CheckRules.drivingIssues(state) + CheckRules.exitIssues(state)).map { it.message },
+                word = pendingWord,
             )
+            pendingWord = null
+            boarding.onParked()
             val all = store.add(card)
             _ui.update { it.copy(cards = all, prompt = Prompt.None) }
             say(Briefing.parked(memo, state))
@@ -239,7 +285,13 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- 탑승 브리핑 ----
 
-    fun playBoardingBriefing() = say(Briefing.boarding(_ui.value.cards.firstOrNull(), hub.state.value))
+    /** 쪽지를 읽어 준다. 버튼을 누르거나, 다음 사람이 타면 차가 먼저 부른다. */
+    fun playBoardingBriefing() {
+        val latest = _ui.value.cards.firstOrNull()
+        boarding.onHandedOver()
+        family.handedOverCardId = latest?.id
+        say(Briefing.boarding(latest, hub.state.value))
+    }
 
     private fun say(text: String) {
         _ui.update { it.copy(lastSpoken = text) }
@@ -291,7 +343,7 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
     fun testPlace(name: String) = _ui.update { it.copy(testPlace = if (it.testPlace == name) null else name) }
     fun testFuel(percent: Int, rangeKm: Float) = hub.update { it.copy(fuelPercent = percent, rangeKm = rangeKm) }
 
-    override fun onCleared() {
+    fun release() {
         binder.stop()
         speaker.release()
         listener.release()
@@ -300,6 +352,14 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /** 운전석 문 이름 ([PleosVehicleBinder]와 테스트 패널이 같은 이름을 쓴다). */
+        const val DRIVER_DOOR = "운전석"
+
+        @Volatile private var instance: ChagokViewModel? = null
+
+        fun get(app: Application): ChagokViewModel =
+            instance ?: synchronized(this) { instance ?: ChagokViewModel(app).also { instance = it } }
+
         /** 테스트용 가상 위치. 실제 차량에서는 FusedLocation 값이 쓰인다. */
         val TEST_PLACES = linkedMapOf(
             "집" to (36.7712 to 126.9318),

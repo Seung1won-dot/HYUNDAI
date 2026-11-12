@@ -102,7 +102,7 @@ Android Studio에서 이 저장소 폴더를 열고 실행(▶)하거나, 터미
 | FusedLocation | 권한 허용 뒤 주차 좌표 수신 |
 | NaviHelper | 저장한 장소로 길 안내 요청 → 내비가 경로 안내 시작 ([캡처](docs/design/pleos_navi.png)) |
 
-화면 캡처: [주차 카드](docs/design/pleos_main.png) · [주행 중](docs/design/pleos_driving.png) · [차가 먼저 묻는 화면](docs/design/pleos_ask.png)
+화면 캡처: [앞 운전자가 남긴 쪽지](docs/design/pleos_main.png) · [주행 중](docs/design/pleos_driving.png) · [차가 먼저 묻는 화면](docs/design/pleos_ask.png)
 
 ---
 

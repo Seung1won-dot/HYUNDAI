@@ -3,6 +3,7 @@ package com.chagok.car.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -71,15 +73,20 @@ import java.util.Locale
 // 색·글꼴·간격은 docs/design/DESIGN.md 의 기준만 쓴다.
 
 // ---- 색 ----
-private val Bg = Color(0xFF101110)
-private val Line = Color(0xFF2A2C29)
-private val TextHi = Color(0xFFF4F1EA)   // 주조색(아이보리): 제목, 값, 주 버튼
-private val TextMid = Color(0xFFA9A79F)
-private val TextLow = Color(0xFF6F6E68)
+// 쪽지를 받는 느낌의 종이 톤. 시스템이 어두운 테마일 때(밤)는 같은 구성의 어두운 종이로 바꾼다.
+private var darkPaper by mutableStateOf(false)
+private fun tone(light: Long, dark: Long) = Color(if (darkPaper) dark else light)
+
+private val Bg get() = tone(0xFFF3EFE6, 0xFF141311)      // 바탕
+private val Sheet get() = tone(0xFFFCFAF4, 0xFF1E1C19)   // 쪽지 한 장
+private val Line get() = tone(0xFFD9D2C3, 0xFF34312B)
+private val TextHi get() = tone(0xFF1E1C19, 0xFFF4F1EA)  // 주조색(먹색): 글, 주 버튼
+private val TextMid get() = tone(0xFF5F5A50, 0xFFA9A79F)
+private val TextLow get() = tone(0xFF7D776B, 0xFF7A786F)
 // 아래 세 색은 차 상태를 알릴 때만 쓴다.
-private val Ok = Color(0xFF57C785)
-private val Warn = Color(0xFFF2B33D)
-private val Danger = Color(0xFFF0604D)
+private val Ok get() = tone(0xFF1F7A48, 0xFF57C785)
+private val Warn get() = tone(0xFFA86200, 0xFFF2B33D)
+private val Danger get() = tone(0xFFBF3B2B, 0xFFF0604D)
 
 // ---- 글꼴: Asta Sans 하나 (Pleos Connect 디자인 가이드 지정) ----
 @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
@@ -108,7 +115,8 @@ fun ChagokApp(vm: ChagokViewModel) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val car by vm.car.collectAsStateWithLifecycle()
 
-    MaterialTheme(colorScheme = darkColorScheme(primary = TextHi, surface = Bg, background = Bg)) {
+    darkPaper = isSystemInDarkTheme()
+    MaterialTheme(colorScheme = if (darkPaper) darkColorScheme() else lightColorScheme()) {
         CompositionLocalProvider(LocalTextStyle provides TextStyle(fontFamily = Asta, color = TextHi)) {
             // 차량 화면은 가로·세로(분할 화면) 모두 올 수 있어 폭에 따라 배치를 바꾼다.
             BoxWithConstraints(Modifier.fillMaxSize().background(Bg)) {
@@ -122,13 +130,12 @@ fun ChagokApp(vm: ChagokViewModel) {
                     Rule()
                     if (wide) {
                         Row(Modifier.weight(1f)) {
-                            Column(Modifier.weight(1.5f).fillMaxHeight().padding(top = 32.dp, bottom = 24.dp, end = 40.dp)) {
-                                LastParking(ui.cards.firstOrNull(), ui.carName, Modifier.weight(1f).clipToBounds())
-                                Spacer(Modifier.height(16.dp))
+                            Column(Modifier.weight(1.5f).fillMaxHeight().padding(top = 24.dp, bottom = 24.dp, end = 40.dp)) {
+                                Note(ui.cards.firstOrNull(), ui.carName, Modifier.weight(1f))
+                                Spacer(Modifier.height(20.dp))
                                 Actions(car, vm)
                             }
-                            Box(Modifier.width(1.dp).fillMaxHeight().background(Line))
-                            Column(Modifier.weight(1f).fillMaxHeight().padding(start = 40.dp, top = 32.dp)) {
+                            Column(Modifier.weight(1f).fillMaxHeight().padding(top = 32.dp)) {
                                 // 등급은 언제나 보이게 고정하고, 아래 목록만 넘겨 본다.
                                 GradeHead(car)
                                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
@@ -138,8 +145,8 @@ fun ChagokApp(vm: ChagokViewModel) {
                         }
                     } else {
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 32.dp)) {
-                            LastParking(ui.cards.firstOrNull(), ui.carName)
-                            Spacer(Modifier.height(32.dp))
+                            Note(ui.cards.firstOrNull(), ui.carName)
+                            Spacer(Modifier.height(24.dp))
                             Actions(car, vm)
                             Spacer(Modifier.height(40.dp))
                             GradeHead(car)
@@ -209,20 +216,29 @@ private fun Header(ui: UiState, car: CarState, vm: ChagokViewModel) {
     }
 }
 
-// ---- 마지막 주차 위치: 이 화면의 주인공 ----
+// ---- 쪽지 한 장: 앞 운전자가 다음 사람에게 남긴 말. 이 화면의 주인공 ----
 
 @Composable
-private fun LastParking(card: ParkingCard?, carName: String, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth()) {
-        Label("마지막 주차 위치")
-        Spacer(Modifier.height(8.dp))
+private fun Note(card: ParkingCard?, carName: String, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(6.dp)
+    Column(
+        modifier.fillMaxWidth().clip(shape).background(Sheet).border(1.dp, Line, shape)
+            .padding(horizontal = 40.dp, vertical = 32.dp),
+    ) {
         if (card == null) {
-            Text("아직 기록이 없어요", fontSize = 64.sp, lineHeight = 72.sp, fontWeight = Heavy)
+            Label("아직 쪽지가 없어요")
+            Spacer(Modifier.height(12.dp))
+            Text("주차하면 차가 먼저 물어봐요", fontSize = 56.sp, lineHeight = 66.sp, fontWeight = Heavy)
             Spacer(Modifier.height(16.dp))
-            Text("주차하면 차가 먼저 물어봐요.", color = TextMid, fontSize = 22.sp)
+            Text("“지하 2층 B구역 기둥 14”처럼 한마디만 남기면, 다음에 타는 사람이 이 쪽지를 받아요.", color = TextMid, fontSize = 22.sp, lineHeight = 32.sp)
             return@Column
         }
-        // 가장 중요한 정보 하나를 가장 크게: 1~2초 안에 읽히도록. 긴 메모는 한 단계 줄인다.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${card.driver}님이 남긴 쪽지", fontSize = 22.sp, fontWeight = Semi)
+            Text("   ${formatTime(card.parkedAtMillis)} · ${card.car ?: carName}", color = TextMid, fontSize = 20.sp, maxLines = 1)
+        }
+        Spacer(Modifier.height(16.dp))
+        // 가장 중요한 말 하나를 가장 크게: 1~2초 안에 읽히도록. 긴 메모는 한 단계 줄인다.
         val big = card.memo.length <= 12
         Text(
             card.memo,
@@ -232,33 +248,28 @@ private fun LastParking(card: ParkingCard?, carName: String, modifier: Modifier 
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${card.driver}님이 주차", fontSize = 22.sp, fontWeight = Semi)
-            Text("   ${formatTime(card.parkedAtMillis)}   ${card.car ?: carName}", color = TextMid, fontSize = 22.sp)
-        }
-        Spacer(Modifier.height(32.dp))
-        // 넘겨받는 사람이 알아야 할 것: 주차 당시 차 상태.
-        Label("넘겨받을 때")
-        Spacer(Modifier.height(12.dp))
-        // 한눈에 읽히도록 세 줄까지만 보여 준다.
-        val left = card.rangeKm?.let { "주행 가능 ${it.toInt()}km" } ?: card.fuelPercent?.let { "연료 $it%" }
-        if (card.issues.isEmpty()) Mark(Ok, listOfNotNull("차 상태 이상 없음", left).joinToString(" · "))
-        card.issues.take(3).forEachIndexed { i, issue ->
-            val more = if (i == 2 && card.issues.size > 3) " 외 ${card.issues.size - 3}건" else ""
-            val extra = if (i == 0 && left != null && IssueHistory.label(issue).startsWith("연료")) " · $left" else ""
-            Mark(Warn, IssueHistory.label(issue) + extra + more)
+        Spacer(Modifier.height(20.dp))
+        Box(Modifier.width(72.dp).height(4.dp).background(TextHi))
+        Spacer(Modifier.height(24.dp))
+        // 넘겨받는 사람이 알아야 할 것을 숫자 표가 아니라 문장으로 적는다. 네 줄까지만.
+        val left = card.rangeKm?.let { "약 ${it.toInt()}km 갈 수 있어요" } ?: card.fuelPercent?.let { "연료가 $it% 남았어요" }
+        val lines = card.issues.map { Warn to IssueHistory.label(it) } +
+            listOfNotNull(left?.let { (if (card.issues.isEmpty()) Ok else TextMid) to it })
+        if (card.issues.isEmpty() && left == null) Mark(Ok, "차는 이상 없이 두고 갔어요")
+        lines.take(4).forEachIndexed { i, (color, text) ->
+            val more = if (i == 3 && lines.size > 4) " 외 ${lines.size - 4}건" else ""
+            Mark(color, text + more)
         }
     }
 }
 
 /** 색 점 하나와 한 줄 문장. 알약 모양 꼬리표 대신 쓴다. */
 @Composable
-private fun Mark(color: Color, text: String) {
-    Row(Modifier.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(color))
+private fun Mark(color: Color, text: String, lines: Int = 1) {
+    Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
+        Box(Modifier.padding(top = 11.dp).size(10.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(14.dp))
-        Text(text, fontSize = 22.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(text, fontSize = 22.sp, lineHeight = 31.sp, maxLines = lines, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -268,8 +279,8 @@ private fun Mark(color: Color, text: String) {
 private fun Actions(car: CarState, vm: ChagokViewModel) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         // 주 버튼은 화면에 하나.
-        PushButton("주차 위치 남기기", Modifier.weight(1.3f), primary = true, enabled = !car.isDriving) { vm.askParking() }
-        PushButton("탑승 브리핑", Modifier.weight(1f)) { vm.playBoardingBriefing() }
+        PushButton("내 쪽지 남기기", Modifier.weight(1.3f), primary = true, enabled = !car.isDriving) { vm.askParking() }
+        PushButton("읽어 줘", Modifier.weight(1f)) { vm.playBoardingBriefing() }
         // 누른 뒤에는 말로만 진행한다: "여기 다음에 오자", "그 빵집 안내해 줘".
         PushButton("말하기", Modifier.weight(0.8f)) { vm.askCommand() }
     }
@@ -307,27 +318,21 @@ private fun PushButton(text: String, modifier: Modifier = Modifier, primary: Boo
 @Composable
 private fun GradeHead(car: CarState) {
     val grade = CheckRules.worst(CheckRules.drivingIssues(car) + CheckRules.exitIssues(car))
-    Label("지금 차 상태")
+    Label("지금 확인할 것")
     Spacer(Modifier.height(8.dp))
-    Text(gradeLabel(grade), color = gradeColor(grade), fontSize = 44.sp, lineHeight = 52.sp, fontWeight = Heavy, maxLines = 1)
-    Spacer(Modifier.height(16.dp))
-    Rule()
+    Text(gradeLabel(grade), color = gradeColor(grade), fontSize = 36.sp, lineHeight = 44.sp, fontWeight = Heavy, maxLines = 1)
+    Spacer(Modifier.height(12.dp))
 }
 
 @Composable
 private fun Side(ui: UiState, car: CarState, vm: ChagokViewModel) {
-    Line("기어", gearLabel(car.gear))
-    // 차량이 주지 않는 정보는 줄을 만들지 않는다.
-    car.rangeKm?.let { Line("주행 가능", "${it.toInt()}km", if (it <= CheckRules.LOW_RANGE_KM) Warn else null) }
-    car.fuelPercent?.let { Line("연료", "$it%", if (it <= CheckRules.LOW_FUEL_PERCENT) Warn else null) }
-    car.batteryPercent?.let { Line("배터리", "$it%", if (it <= CheckRules.LOW_BATTERY_PERCENT) Warn else null) }
-    Line("문", if (car.openDoors.isEmpty()) "닫힘" else "${car.openDoors.joinToString(", ")} 열림", if (car.openDoors.isEmpty()) null else Danger)
-    Line("창문", if (car.openWindows.isEmpty()) "닫힘" else "열림", if (car.openWindows.isEmpty()) null else Warn)
-    car.headlightOn?.let { Line("라이트", if (it) "켜짐" else "꺼짐", if (it) Warn else null) }
-    car.lowTirePressure?.let { Line("타이어", if (it) "공기압 낮음" else "정상", if (it) Warn else null) }
+    // 차량 상태 표를 늘어놓지 않는다. 지금 손봐야 할 것만 문장으로 말한다.
+    val now = CheckRules.drivingIssues(car) + CheckRules.exitIssues(car)
+    if (now.isEmpty()) Hint("문, 창문, 라이트, 남은 거리 모두 괜찮아요.")
+    now.forEach { Mark(gradeColor(it.grade), it.message, lines = 2) }
     // 되풀이되는 이상: 가족이 함께 보고 정비소에서 보여 줄 근거.
     IssueHistory.repeated(ui.cards, System.currentTimeMillis()).forEach {
-        Line("최근 2주", "${it.label} ${it.times}회", Warn)
+        Mark(Warn, "최근 2주 동안 ‘${it.label}’ ${it.times}번", lines = 2)
     }
 
     Spacer(Modifier.height(40.dp))
@@ -351,11 +356,11 @@ private fun Side(ui: UiState, car: CarState, vm: ChagokViewModel) {
     }
 
     Spacer(Modifier.height(40.dp))
-    Label("이전 기록")
+    Label("지난 쪽지")
     Spacer(Modifier.height(12.dp))
     Rule()
     val older = ui.cards.drop(1).take(6)
-    if (older.isEmpty()) Hint("주차할 때마다 여기에 쌓여요.")
+    if (older.isEmpty()) Hint("주차할 때마다 한 장씩 쌓여요.")
     older.forEach { c ->
         Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(c.memo, fontSize = 22.sp, fontWeight = Semi, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -364,26 +369,6 @@ private fun Side(ui: UiState, car: CarState, vm: ChagokViewModel) {
         }
         Rule()
     }
-}
-
-/** 항목 이름과 값 한 줄. 이상이 있으면 값에만 상태 색을 쓴다. */
-@Composable
-private fun Line(label: String, value: String, alert: Color? = null) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = TextMid, fontSize = 20.sp)
-        Spacer(Modifier.width(24.dp))
-        Text(
-            value,
-            color = alert ?: TextHi,
-            fontSize = 22.sp,
-            fontWeight = if (alert != null) Heavy else Semi,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-        )
-    }
-    Rule()
 }
 
 @Composable
@@ -529,14 +514,6 @@ private fun TestChip(text: String, selected: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
     )
-}
-
-private fun gearLabel(g: Gear) = when (g) {
-    Gear.PARK -> "P"
-    Gear.REVERSE -> "R"
-    Gear.NEUTRAL -> "N"
-    Gear.DRIVE -> "D"
-    Gear.UNKNOWN -> "–"
 }
 
 private fun formatTime(millis: Long): String {

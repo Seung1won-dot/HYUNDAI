@@ -7,6 +7,7 @@
     <uses-permission android:name="pleos.car.permission.CAR_WINDOWS" /> <!-- 창문 열림 -->
     <uses-permission android:name="pleos.car.permission.CAR_LIGHTS" />  <!-- 라이트 -->
     <uses-permission android:name="pleos.car.permission.CAR_ENERGY" />  <!-- 연료, 배터리 -->
+    <uses-permission android:name="pleos.car.permission.PRIVATE_CAR_SAFETY" /> <!-- 경고등 변화 구독 -->
     <uses-permission android:name="pleos.car.permission.CAR_SAFETY" />  <!-- 타이어, 경고등 -->
 
     <!-- Pleos 음성·위치 SDK -->
@@ -14,6 +15,7 @@
     <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
     <uses-permission android:name="pleos.car.permission.FUSED_LOCATION" />
     <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />  <!-- 저장한 장소로 길 안내 -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />
 
     <uses-feature
         android:name="android.hardware.type.automotive"

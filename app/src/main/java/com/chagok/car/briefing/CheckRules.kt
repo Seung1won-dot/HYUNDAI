@@ -29,7 +29,9 @@ object CheckRules {
         val lowBattery = (s.batteryPercent != null && s.batteryPercent <= LOW_BATTERY_PERCENT) || "LOW_EV_BATTERY" in s.warnings
         val lowRange = range != null && range <= LOW_RANGE_KM
         if (lowFuel || lowBattery || lowRange) {
-            val what = if (lowBattery && !lowFuel) "배터리가" else "연료가"
+            // 연료 정보가 없고 배터리 정보만 있는 차(전기차)는 배터리로 말한다.
+            val electric = s.fuelPercent == null && s.batteryPercent != null
+            val what = if ((lowBattery || electric) && !lowFuel) "배터리가" else "연료가"
             val detail = when {
                 range != null -> "약 ${range.toInt()}km 갈 수 있어요."
                 lowBattery && s.batteryPercent != null -> "${s.batteryPercent}% 남았어요."

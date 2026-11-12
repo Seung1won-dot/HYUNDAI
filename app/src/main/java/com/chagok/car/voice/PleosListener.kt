@@ -23,6 +23,18 @@ class PleosListener(context: Context) : Listener {
     private var lastText = ""
     private var delivered = false
 
+    // 말이 없으면 마이크를 계속 켜 두지 않는다. (Pleos 에뮬레이터에서 무음일 때 인식이 끝나지 않는 것을 확인)
+    private val silence = Runnable {
+        if (!delivered) {
+            runCatching { stt?.stop() }
+            if (lastText.isNotBlank()) deliver() else { delivered = true; onError("TIMEOUT") }
+        }
+    }
+    private fun waitForSpeech() {
+        main.removeCallbacks(silence)
+        main.postDelayed(silence, SILENCE_MILLIS)
+    }
+
     override val isAvailable: Boolean get() = ready
 
     private val results = object : ResultListener {
@@ -30,7 +42,7 @@ class PleosListener(context: Context) : Listener {
         override fun onStartedRecognition() = Unit
         override fun onUpdated(stt: String, completed: Boolean) {
             lastText = stt
-            main.post { if (completed) deliver() else onPartial(stt) }
+            main.post { if (completed) deliver() else { waitForSpeech(); onPartial(stt) } }
         }
         override fun onUpdatedEpdData(on: Long, off: Long) = Unit
         override fun onUpdatedRms(rms: Double) = Unit
@@ -50,7 +62,7 @@ class PleosListener(context: Context) : Listener {
             val s = SpeechToText(context.applicationContext, Mode.ON_DEVICE)
             s.initialize(object : OnInitializeListener {
                 override fun onSuccess() {
-                    s.setLocale(Locale.KOREAN)
+                    s.setLocale(Locale.KOREA)
                     s.addListener(results)
                     stt = s
                     ready = true
@@ -67,6 +79,7 @@ class PleosListener(context: Context) : Listener {
     private fun deliver() {
         if (delivered) return
         delivered = true
+        main.removeCallbacks(silence)
         onFinal(lastText)
     }
 
@@ -82,13 +95,20 @@ class PleosListener(context: Context) : Listener {
         lastText = ""
         delivered = false
         s.request()
+        waitForSpeech()
     }
 
-    override fun stop() { runCatching { stt?.stop() } }
+    override fun stop() {
+        main.removeCallbacks(silence)
+        runCatching { stt?.stop() }
+    }
 
     override fun release() {
         runCatching { stt?.removeListener(results); stt?.release() }
     }
 
-    private companion object { const val TAG = "ChagokStt" }
+    private companion object {
+        const val TAG = "ChagokStt"
+        const val SILENCE_MILLIS = 10_000L
+    }
 }

@@ -49,6 +49,8 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -110,7 +112,11 @@ fun ChagokApp(vm: ChagokViewModel) {
         CompositionLocalProvider(LocalTextStyle provides TextStyle(fontFamily = Asta, color = TextHi)) {
             // 차량 화면은 가로·세로(분할 화면) 모두 올 수 있어 폭에 따라 배치를 바꾼다.
             BoxWithConstraints(Modifier.fillMaxSize().background(Bg)) {
-                val wide = maxWidth > maxHeight
+              // 기준 화면(1280×800dp)보다 넓은 차량 화면에서는 글자와 버튼을 같은 비율로 키운다.
+              val base = LocalDensity.current
+              val scale = minOf(maxWidth.value / 1280f, maxHeight.value / 800f).coerceIn(1f, 1.5f)
+              val wide = maxWidth > maxHeight
+              CompositionLocalProvider(LocalDensity provides Density(base.density * scale, base.fontScale)) {
                 Column(Modifier.fillMaxSize().padding(horizontal = 40.dp)) {
                     Header(ui, car, vm)
                     Rule()
@@ -144,6 +150,7 @@ fun ChagokApp(vm: ChagokViewModel) {
                     if (ui.showTestPanel) TestPanel(car, ui.testPlace, vm)
                 }
                 (ui.prompt as? Prompt.Asking)?.let { AskScreen(it, car.isDriving, vm) }
+              }
             }
         }
     }

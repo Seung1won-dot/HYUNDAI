@@ -49,13 +49,9 @@ class PleosVehicleBinder(context: Context, private val hub: CarStateHub) {
     fun start() {
         try {
             vehicle.initialize()
-            bindGear()
-            bindDoors()
-            bindWindows()
-            bindLight()
-            bindEnergy()
-            bindOdometer()
-            bindTelltales()
+            // 한 항목이 막혀도(권한, 미지원) 나머지는 계속 연결한다.
+            listOf(::bindGear, ::bindDoors, ::bindWindows, ::bindLight, ::bindEnergy, ::bindOdometer, ::bindTelltales)
+                .forEach { bind -> runCatching { bind() }.onFailure { Log.w(TAG, "연결 실패: ${it.message}") } }
         } catch (e: Throwable) {
             // Pleos 차량 서비스가 없는 기기(일반 에뮬레이터 등)에서는 테스트 패널로만 동작한다.
             Log.w(TAG, "Vehicle SDK를 쓸 수 없어요: ${e.message}")
@@ -162,9 +158,10 @@ class PleosVehicleBinder(context: Context, private val hub: CarStateHub) {
         odo.registerDistanceDriven(dl)
         releasers += { odo.unregisterDistanceDriven(dl) }
 
-        odo.getRangeRemainingDistance({ km -> hub.update { it.copy(rangeKm = km) } }, fail("주행가능거리"))
+        // 주행가능거리는 미터로 온다(Pleos 에뮬레이터 2.1.0에서 확인).
+        odo.getRangeRemainingDistance({ m -> hub.update { it.copy(rangeKm = m?.div(1000f)) } }, fail("주행가능거리"))
         val rl = object : RangeRemainingListener {
-            override fun onRangeRemainingChanged(range: Float?) = hub.update { it.copy(rangeKm = range) }
+            override fun onRangeRemainingChanged(range: Float?) = hub.update { it.copy(rangeKm = range?.div(1000f)) }
             override fun onFailed(e: Exception) = fail("주행가능거리")(e)
         }
         odo.registerRangeRemainingListener(rl)
@@ -178,6 +175,7 @@ class PleosVehicleBinder(context: Context, private val hub: CarStateHub) {
                 .filter { it.state != TelltaleState.OFF }
                 .map { it.type.name }
                 .toSet()
+            Log.i(TAG, "경고등: ${t?.telltales.orEmpty().map { "${it.type}=${it.state}" }}")
             hub.update { it.copy(warnings = on, lowTirePressure = "TPMS" in on) }
         }
         safety.getTelltalesInfo({ apply(it) }, fail("경고등"))

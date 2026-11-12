@@ -69,7 +69,7 @@ Android Studio에서 이 저장소 폴더를 열고 실행(▶)하거나, 터미
 빌드 결과는 `app/build/outputs/apk/release/app-release.apk`에 생깁니다.
 
 ### 4. 써 보기
-- **차량 제어판(Pleos 에뮬레이터)** 에서 기어를 D → P로 바꾸면 차가 "주차 위치를 남길까요?"라고 묻습니다.
+- **Pleos Connect Virtual Console**(`adb forward tcp:8088 tcp:8088` 뒤 브라우저에서 `http://127.0.0.1:8088/`)에서 기어를 D → P로 바꾸면 차가 "주차 위치를 남길까요?"라고 묻습니다. 창문·라이트·주행가능거리·경고등(TPMS)을 바꾸면 차 상태와 등급에 반영됩니다.
 - 차량 없이 흐름만 볼 때는 화면 오른쪽 위 **테스트 패널**을 켜고 `기어 D` → `기어 P`를 누릅니다. 창문·라이트·타이어·연료 상태도 바꿔 볼 수 있습니다.
 - **자주 가는 주차장**: 테스트 패널에서 `위치 집`을 고르고 같은 자리를 두 번 기록하면, 세 번째부터 "평소처럼 …에 주차하셨어요?"라고 묻습니다.
 - **장소 핀**: `말하기`를 누르고 "여기 다음에 오자", "그 빵집 안내해 줘"라고 말합니다. 테스트 패널의 `말: …` 칩으로도 넣어 볼 수 있습니다.
@@ -90,7 +90,19 @@ Android Studio에서 이 저장소 폴더를 열고 실행(▶)하거나, 터미
 | 원본 음성 보관, 건물명 자동 인식 | 🚧 2단계 |
 | 가족 연결(QR·웹앱) | 🚧 2단계 |
 
-> ✅는 코드 구현과 빌드·단위 테스트 통과 기준입니다. Pleos 에뮬레이터에서의 실제 차량 값·음성 동작 검증은 진행 중입니다.
+> ✅는 코드 구현, 빌드·단위 테스트 통과, Pleos Connect Emulator 2.1.0 동작 확인 기준입니다.
+
+**Pleos Connect Emulator 2.1.0에서 확인한 것 (2026-11-12)**
+
+| SDK | 확인 내용 |
+|---|---|
+| Vehicle | Virtual Console에서 바꾼 기어(D→P), 창문, 라이트, 주행가능거리, 배터리, 타이어 경고등(TPMS)이 앱에 반영됨 |
+| TextToSpeech | 주차 질문, 저장 확인, 탑승 브리핑을 차량 음성으로 재생 |
+| SpeechToText | P단 진입 뒤 듣기 시작, 말이 없으면 10초 뒤 종료하고 직접 입력으로 전환. 실제 발화 인식 결과는 마이크 연결 후 확인 예정 |
+| FusedLocation | 권한 허용 뒤 주차 좌표 수신 |
+| NaviHelper | 저장한 장소로 길 안내 요청 → 내비가 경로 안내 시작 ([캡처](docs/design/pleos_navi.png)) |
+
+화면 캡처: [주차 카드](docs/design/pleos_main.png) · [주행 중](docs/design/pleos_driving.png) · [차가 먼저 묻는 화면](docs/design/pleos_ask.png)
 
 ---
 
@@ -98,15 +110,17 @@ Android Studio에서 이 저장소 폴더를 열고 실행(▶)하거나, 터미
 
 | 항목 | 버전 / 내용 |
 |---|---|
-| 실행 환경 | Pleos Connect Emulator 2.1.0 (Android 14, API 34) 대상. 현재까지는 Android 14(API 34) 일반 에뮬레이터에서 확인 |
-| 화면 규격 | 가로·세로(분할 화면) 모두 지원. 2560×1600 가로, 1600×2560 세로(320dpi)에서 확인 |
+| 실행 환경 | Pleos Connect Emulator 2.1.0 (Android 14, API 34, arm64)에서 확인 |
+| 화면 규격 | Pleos Connect Emulator 기본 화면 2560×1440(160dpi), 앱 영역 약 1680×1210에서 확인. 가로·세로(분할 화면) 모두 지원하고 화면 크기에 맞춰 글자와 버튼 크기를 조절 |
 | 글꼴 | Asta Sans (Pleos Connect 디자인 가이드 지정, SIL OFL) |
 | Pleos SDK | Vehicle 2.3.2, SpeechToText 3.3.1, TextToSpeech 3.3.1, FusedLocation 1.1.3, NaviHelper 3.0.5 |
 | 최소 Android API | 28 이상 |
 | 개발 언어 | Kotlin |
 | JDK | 17 |
 | Gradle | 8.0 이상 |
-| 백엔드 | Firebase (설정 방법 추후 기재) |
+| 권한 | 위치(`pleos.car.permission.FUSED_LOCATION`)는 첫 실행 때 허용을 물어봅니다. 나머지 차량·음성·내비 권한은 설치 시 부여됩니다 |
+| 음성 테스트 | 에뮬레이터 Extended Controls > Microphone에서 호스트 마이크 입력을 켭니다 |
+| 백엔드 | Firebase (가족 연결용, 2단계에서 추가) |
 
 ---
 

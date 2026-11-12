@@ -43,7 +43,7 @@ class PleosSpeaker(context: Context) : Speaker {
             val tts = TextToSpeech(appContext, Mode.ON_DEVICE)
             tts.initialize(object : OnInitializeListener {
                 override fun onSuccess() {
-                    tts.setLocale(Locale.KOREAN)
+                    tts.setLocale(Locale.KOREA)
                     tts.addEventListener(events)
                     pleos = tts
                     pleosReady = true

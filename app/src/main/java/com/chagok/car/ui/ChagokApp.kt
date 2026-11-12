@@ -58,6 +58,7 @@ import com.chagok.car.briefing.Grade
 import com.chagok.car.model.CarState
 import com.chagok.car.model.Gear
 import com.chagok.car.model.ParkingCard
+import com.chagok.car.model.PlacePin
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -110,7 +111,10 @@ fun ChagokApp(vm: ChagokViewModel) {
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             CarStatus(car)
-                            History(ui.cards.drop(1), Modifier.weight(1f))
+                            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Places(ui.pins, car.isDriving, vm, Modifier.weight(1f))
+                                History(ui.cards.drop(1), Modifier.weight(1f))
+                            }
                         }
                     }
                 } else {
@@ -121,10 +125,11 @@ fun ChagokApp(vm: ChagokViewModel) {
                         ParkingHero(ui.cards.firstOrNull(), Modifier.height(360.dp))
                         Actions(car, vm)
                         CarStatus(car)
+                        Places(ui.pins, car.isDriving, vm, Modifier.height(300.dp))
                     }
                 }
                 if (ui.lastSpoken.isNotEmpty()) SpokenBar(ui.lastSpoken)
-                if (ui.showTestPanel) TestPanel(car, vm)
+                if (ui.showTestPanel) TestPanel(car, ui.testPlace, vm)
             }
             (ui.prompt as? Prompt.Asking)?.let { AskOverlay(it, car.isDriving, vm) }
         }
@@ -264,6 +269,8 @@ private fun Actions(car: CarState, vm: ChagokViewModel) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         BigButton("주차 위치 남기기", enabled = !car.isDriving, modifier = Modifier.weight(1f)) { vm.askParking() }
         BigButton("탑승 브리핑 듣기", enabled = true, modifier = Modifier.weight(1f), primary = false) { vm.playBoardingBriefing() }
+        // 누른 뒤에는 말로만 진행한다: "여기 다음에 오자", "그 빵집 안내해 줘".
+        BigButton("말하기", enabled = true, modifier = Modifier.weight(0.6f), primary = false) { vm.askCommand() }
     }
 }
 
@@ -364,6 +371,41 @@ private fun CheckRow(label: String, ok: Boolean, value: String, alertColor: Colo
     }
 }
 
+// ---- 가족 장소 ----
+
+/** "여기 다음에 오자"로 모은 장소. 정차 중에는 눌러서, 주행 중에는 말로 길 안내를 부른다. */
+@Composable
+private fun Places(pins: List<PlacePin>, driving: Boolean, vm: ChagokViewModel, modifier: Modifier = Modifier) {
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Panel).border(1.dp, Line, RoundedCornerShape(28.dp)).padding(24.dp),
+    ) {
+        Text("가족 장소", color = TextMid, fontSize = 16.sp)
+        if (pins.isEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            Text("“여기 다음에 오자”라고 말하면 저장돼요.", color = TextLow, fontSize = 18.sp)
+        }
+        LazyColumn(contentPadding = PaddingValues(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(pins, key = { it.id }) { pin ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(PanelHigh)
+                        .clickable(enabled = !driving) { vm.guideTo(pin) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(pin.name, color = TextHi, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${pin.savedBy}님이 저장", color = TextLow, fontSize = 15.sp)
+                    }
+                    Text("안내", color = if (driving) TextLow else Blue, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
 // ---- 이전 기록 ----
 
 @Composable
@@ -454,9 +496,13 @@ private fun AskOverlay(asking: Prompt.Asking, driving: Boolean, vm: ChagokViewMo
                     color = TextMid,
                     fontSize = 24.sp,
                 )
-                Text("예: “지하 2층 B구역 기둥 14”", color = TextLow, fontSize = 20.sp)
+                Text(askHint(asking), color = TextLow, fontSize = 20.sp)
             }
             if (!driving) {
+                // 평소 자리를 제안했을 때는 한 번 눌러서도 끝낼 수 있다.
+                if (asking.suggestion != null) {
+                    BigButton("응, 맞아요", enabled = true, modifier = Modifier.fillMaxWidth()) { vm.onAnswer("응") }
+                }
                 OutlinedTextField(
                     value = typed,
                     onValueChange = { typed = it },
@@ -476,8 +522,8 @@ private fun AskOverlay(asking: Prompt.Asking, driving: Boolean, vm: ChagokViewMo
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    BigButton("안 남길게요", enabled = true, modifier = Modifier.weight(1f), primary = false) { vm.cancelPrompt() }
-                    BigButton("저장", enabled = typed.isNotBlank(), modifier = Modifier.weight(1f)) { vm.onAnswer(typed) }
+                    BigButton(if (asking.kind == Ask.COMMAND) "닫기" else "안 남길게요", enabled = true, modifier = Modifier.weight(1f), primary = false) { vm.cancelPrompt() }
+                    BigButton(if (asking.kind == Ask.COMMAND) "확인" else "저장", enabled = typed.isNotBlank(), modifier = Modifier.weight(1f)) { vm.onAnswer(typed) }
                 }
             }
         }
@@ -488,7 +534,7 @@ private fun AskOverlay(asking: Prompt.Asking, driving: Boolean, vm: ChagokViewMo
 
 /** 실제 차량 없이 흐름을 확인하는 패널. (Pleos 에뮬레이터에서는 차량 제어판 값이 그대로 들어온다.) */
 @Composable
-private fun TestPanel(car: CarState, vm: ChagokViewModel) {
+private fun TestPanel(car: CarState, testPlace: String?, vm: ChagokViewModel) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).horizontalScroll(rememberScrollState()).padding(10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -504,6 +550,13 @@ private fun TestPanel(car: CarState, vm: ChagokViewModel) {
         TestChip("타이어 경고", car.lowTirePressure == true, vm::testToggleTire)
         TestChip("연료 10%", car.fuelPercent == 10) { vm.testFuel(10, 40f) }
         TestChip("연료 70%", car.fuelPercent == 70) { vm.testFuel(70, 420f) }
+        // 실제 위치를 못 받는 환경에서 자주 가는 주차장과 장소 저장을 확인하기 위한 가상 위치.
+        ChagokViewModel.TEST_PLACES.keys.forEach { name ->
+            TestChip("위치 $name", testPlace == name) { vm.testPlace(name) }
+        }
+        listOf("여기 빵집으로 저장해 줘", "그 빵집 안내해 줘").forEach { say ->
+            TestChip("말: $say", false) { vm.testSay(say) }
+        }
     }
 }
 
@@ -519,6 +572,13 @@ private fun TestChip(text: String, selected: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     )
+}
+
+private fun askHint(asking: Prompt.Asking) = when (asking.kind) {
+    Ask.PARKING -> if (asking.suggestion != null) "“응”이라고 하거나, 다른 자리면 그대로 말해 주세요" else "예: “지하 2층 B구역 기둥 14”"
+    Ask.PARKING_WHERE -> "예: “지하 2층 B구역 기둥 14”"
+    Ask.COMMAND -> "예: “여기 다음에 오자”, “그 빵집 안내해 줘”"
+    Ask.PLACE_NAME -> "예: “성심당 빵집”"
 }
 
 private fun gearLabel(g: Gear) = when (g) {

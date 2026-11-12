@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chagok.car.briefing.Briefing
 import com.chagok.car.briefing.CheckRules
+import com.chagok.car.data.FamilySettings
 import com.chagok.car.data.ParkingStore
 import com.chagok.car.data.PlaceStore
 import com.chagok.car.location.PleosLocation
@@ -46,13 +47,14 @@ sealed interface Prompt {
 }
 
 /** 차가 지금 무엇을 묻고 있는지. 대답을 어떻게 처리할지와 화면 안내 문구가 달라진다. */
-enum class Ask { PARKING, PARKING_WHERE, COMMAND, PLACE_NAME }
+enum class Ask { PARKING, PARKING_WHERE, COMMAND, PLACE_NAME, CAR_NAME, MEMBER_NAME }
 
 data class UiState(
     val cards: List<ParkingCard> = emptyList(),
     val pins: List<PlacePin> = emptyList(),
-    val drivers: List<String> = listOf("엄마", "아빠", "딸"),
-    val driver: String = "엄마",
+    val carName: String = FamilySettings.DEFAULT_CAR,
+    val drivers: List<String> = FamilySettings.DEFAULT_MEMBERS,
+    val driver: String = FamilySettings.DEFAULT_MEMBERS.first(),
     val prompt: Prompt = Prompt.None,
     /** 차가 마지막으로 한 말 (소리를 못 들었을 때를 위해 화면에도 보여 준다). */
     val lastSpoken: String = "",
@@ -70,12 +72,19 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
     private val location = PleosLocation(app)
     private val store = ParkingStore(app)
     private val places = PlaceStore(app)
+    private val family = FamilySettings(app)
     private val navi = PleosNavi(app)
     private val detector = ParkingDetector()
 
     val car: StateFlow<CarState> = hub.state
 
-    private val _ui = MutableStateFlow(UiState(cards = store.load(), pins = places.load()))
+    private val _ui = MutableStateFlow(UiState(
+        cards = store.load(),
+        pins = places.load(),
+        carName = family.carName,
+        drivers = family.members,
+        driver = family.members.first(),
+    ))
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
     private var spokenIssues = emptySet<String>()
@@ -147,6 +156,8 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
             Ask.PARKING_WHERE -> saveCard(MemoText.clean(raw))
             Ask.COMMAND -> onCommand(VoiceCommand.parse(raw))
             Ask.PLACE_NAME -> savePin(MemoText.clean(raw))
+            Ask.CAR_NAME -> renameCar(MemoText.clean(raw))
+            Ask.MEMBER_NAME -> addMember(MemoText.clean(raw))
         }
     }
 
@@ -210,6 +221,7 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
                 id = UUID.randomUUID().toString(),
                 memo = memo,
                 driver = driver,
+                car = _ui.value.carName,
                 parkedAtMillis = System.currentTimeMillis(),
                 latitude = latLng?.first,
                 longitude = latLng?.second,
@@ -241,6 +253,25 @@ class ChagokViewModel(app: Application) : AndroidViewModel(app) {
     // ---- 화면 조작 ----
 
     fun selectDriver(name: String) = _ui.update { it.copy(driver = name) }
+
+    // ---- 차 이름과 가족 구성 (정차 중에만) ----
+
+    fun askCarName() = ask("이 차를 뭐라고 부를까요?", Ask.CAR_NAME)
+    fun askNewMember() = ask("누구를 추가할까요?", Ask.MEMBER_NAME)
+
+    private fun renameCar(name: String) {
+        family.carName = name
+        _ui.update { it.copy(carName = name, prompt = Prompt.None) }
+        say("이 차를 ${VoiceCommand.toward(name)} 부를게요.")
+    }
+
+    private fun addMember(name: String) {
+        val current = _ui.value.drivers
+        val all = if (name in current) current else (current + name).takeLast(FamilySettings.MAX_MEMBERS)
+        family.members = all
+        _ui.update { it.copy(drivers = all, driver = name, prompt = Prompt.None) }
+        say("$name, 추가했어요.")
+    }
     fun toggleTestPanel() = _ui.update { it.copy(showTestPanel = !it.showTestPanel) }
 
     // ---- 테스트 패널: 차량 없이도 흐름을 확인할 수 있게 상태를 직접 바꾼다 ----

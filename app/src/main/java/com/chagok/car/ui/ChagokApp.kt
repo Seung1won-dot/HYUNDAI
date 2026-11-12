@@ -8,11 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,21 +19,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,9 +39,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,8 +53,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.chagok.car.R
 import com.chagok.car.briefing.CheckRules
 import com.chagok.car.briefing.Grade
+import com.chagok.car.briefing.IssueHistory
+import com.chagok.car.data.FamilySettings
 import com.chagok.car.model.CarState
 import com.chagok.car.model.Gear
 import com.chagok.car.model.ParkingCard
@@ -63,24 +66,33 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+// 색·글꼴·간격은 docs/design/DESIGN.md 의 기준만 쓴다.
+
 // ---- 색 ----
-// 어두운 실내에서 눈부시지 않게 배경은 짙게, 글자는 대비를 크게 둔다.
-private val Bg = Color(0xFF0A0D12)
-private val Panel = Color(0xFF141922)
-private val PanelHigh = Color(0xFF1C2330)
-private val Line = Color(0xFF263041)
-private val TextHi = Color(0xFFF2F5F9)
-private val TextMid = Color(0xFFA7B1C2)
-private val TextLow = Color(0xFF6B7688)
-private val Blue = Color(0xFF3D8BFF)
-private val Green = Color(0xFF34C77B)
-private val Yellow = Color(0xFFFFC043)
-private val Red = Color(0xFFFF5D5D)
+private val Bg = Color(0xFF101110)
+private val Line = Color(0xFF2A2C29)
+private val TextHi = Color(0xFFF4F1EA)   // 주조색(아이보리): 제목, 값, 주 버튼
+private val TextMid = Color(0xFFA9A79F)
+private val TextLow = Color(0xFF6F6E68)
+// 아래 세 색은 차 상태를 알릴 때만 쓴다.
+private val Ok = Color(0xFF57C785)
+private val Warn = Color(0xFFF2B33D)
+private val Danger = Color(0xFFF0604D)
+
+// ---- 글꼴: Asta Sans 하나 (Pleos Connect 디자인 가이드 지정) ----
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+private fun asta(weight: Int) =
+    Font(R.font.asta_sans, FontWeight(weight), variationSettings = FontVariation.Settings(FontVariation.weight(weight)))
+
+private val Asta = FontFamily(asta(400), asta(600), asta(800))
+private val Regular = FontWeight(400)
+private val Semi = FontWeight(600)
+private val Heavy = FontWeight(800)
 
 private fun gradeColor(g: Grade) = when (g) {
-    Grade.GREEN -> Green
-    Grade.YELLOW -> Yellow
-    Grade.RED -> Red
+    Grade.GREEN -> Ok
+    Grade.YELLOW -> Warn
+    Grade.RED -> Danger
 }
 
 private fun gradeLabel(g: Grade) = when (g) {
@@ -94,440 +106,375 @@ fun ChagokApp(vm: ChagokViewModel) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val car by vm.car.collectAsStateWithLifecycle()
 
-    MaterialTheme(colorScheme = darkColorScheme(primary = Blue, surface = Panel, background = Bg)) {
-        // 차량 화면은 가로·세로(분할 화면) 모두 올 수 있어 폭에 따라 배치를 바꾼다.
-        BoxWithConstraints(Modifier.fillMaxSize().background(Bg)) {
-            val wide = maxWidth > maxHeight
-            Column(
-                Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Header(ui, car, vm)
-                if (wide) {
-                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Column(Modifier.weight(1.35f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            ParkingHero(ui.cards.firstOrNull(), Modifier.weight(1f))
-                            Actions(car, vm)
-                        }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            CarStatus(car)
-                            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                Places(ui.pins, car.isDriving, vm, Modifier.weight(1f))
-                                History(ui.cards.drop(1), Modifier.weight(1f))
+    MaterialTheme(colorScheme = darkColorScheme(primary = TextHi, surface = Bg, background = Bg)) {
+        CompositionLocalProvider(LocalTextStyle provides TextStyle(fontFamily = Asta, color = TextHi)) {
+            // 차량 화면은 가로·세로(분할 화면) 모두 올 수 있어 폭에 따라 배치를 바꾼다.
+            BoxWithConstraints(Modifier.fillMaxSize().background(Bg)) {
+                val wide = maxWidth > maxHeight
+                Column(Modifier.fillMaxSize().padding(horizontal = 40.dp)) {
+                    Header(ui, car, vm)
+                    Rule()
+                    if (wide) {
+                        Row(Modifier.weight(1f)) {
+                            Column(Modifier.weight(1.5f).fillMaxHeight().padding(top = 32.dp, bottom = 24.dp, end = 40.dp)) {
+                                LastParking(ui.cards.firstOrNull(), ui.carName, Modifier.weight(1f).clipToBounds())
+                                Spacer(Modifier.height(16.dp))
+                                Actions(car, vm)
+                            }
+                            Box(Modifier.width(1.dp).fillMaxHeight().background(Line))
+                            Column(Modifier.weight(1f).fillMaxHeight().padding(start = 40.dp, top = 32.dp)) {
+                                // 등급은 언제나 보이게 고정하고, 아래 목록만 넘겨 본다.
+                                GradeHead(car)
+                                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+                                    Side(ui, car, vm)
+                                }
                             }
                         }
+                    } else {
+                        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 32.dp)) {
+                            LastParking(ui.cards.firstOrNull(), ui.carName)
+                            Spacer(Modifier.height(32.dp))
+                            Actions(car, vm)
+                            Spacer(Modifier.height(40.dp))
+                            GradeHead(car)
+                            Side(ui, car, vm)
+                        }
                     }
-                } else {
-                    Column(
-                        Modifier.weight(1f).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        ParkingHero(ui.cards.firstOrNull(), Modifier.height(360.dp))
-                        Actions(car, vm)
-                        CarStatus(car)
-                        Places(ui.pins, car.isDriving, vm, Modifier.height(300.dp))
-                    }
+                    if (ui.lastSpoken.isNotEmpty()) Spoken(ui.lastSpoken)
+                    if (ui.showTestPanel) TestPanel(car, ui.testPlace, vm)
                 }
-                if (ui.lastSpoken.isNotEmpty()) SpokenBar(ui.lastSpoken)
-                if (ui.showTestPanel) TestPanel(car, ui.testPlace, vm)
+                (ui.prompt as? Prompt.Asking)?.let { AskScreen(it, car.isDriving, vm) }
             }
-            (ui.prompt as? Prompt.Asking)?.let { AskOverlay(it, car.isDriving, vm) }
         }
     }
 }
 
-// ---- 머리줄 ----
+@Composable
+private fun Rule() = Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+
+@Composable
+private fun Label(text: String) = Text(text, color = TextMid, fontSize = 18.sp, fontWeight = Regular)
+
+// ---- 머리줄: 앱 이름, 이 차, 지금 운전자 ----
 
 @Composable
 private fun Header(ui: UiState, car: CarState, vm: ChagokViewModel) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(Blue),
-            contentAlignment = Alignment.Center,
-        ) { Text("P", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black) }
-        Spacer(Modifier.width(12.dp))
-        Text("차곡차곡", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = TextHi)
-        Spacer(Modifier.width(28.dp))
-        // 운전자 선택: 하나로 묶인 선택 막대. 주행 중에는 바꿀 수 없다.
-        Row(
-            Modifier.clip(RoundedCornerShape(50)).background(Panel).border(1.dp, Line, RoundedCornerShape(50)).padding(4.dp),
-        ) {
-            ui.drivers.forEach { name ->
-                val selected = name == ui.driver
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(if (selected) Blue else Color.Transparent)
-                        .clickable(enabled = !car.isDriving) { vm.selectDriver(name) }
-                        .padding(horizontal = 22.dp, vertical = 10.dp),
-                ) {
-                    Text(
-                        name,
-                        fontSize = 18.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (selected) Color.White else TextMid,
-                    )
-                }
+    val parked = !car.isDriving
+    Row(Modifier.fillMaxWidth().height(84.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("차곡차곡", fontSize = 22.sp, fontWeight = Heavy)
+        Spacer(Modifier.width(16.dp))
+        // 집에 차가 여러 대일 때 구분하는 이름. 정차 중에 눌러서 바꾼다.
+        Text(
+            ui.carName,
+            color = TextMid,
+            fontSize = 20.sp,
+            modifier = Modifier.clickable(enabled = parked) { vm.askCarName() }.padding(vertical = 16.dp, horizontal = 8.dp),
+        )
+        Spacer(Modifier.weight(1f))
+        Text("운전자", color = TextLow, fontSize = 15.sp)
+        Spacer(Modifier.width(8.dp))
+        ui.drivers.forEach { name ->
+            val selected = name == ui.driver
+            Column(
+                Modifier.clickable(enabled = parked) { vm.selectDriver(name) }.padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(name, fontSize = 20.sp, fontWeight = if (selected) Heavy else Regular, color = if (selected) TextHi else TextLow)
+                Spacer(Modifier.height(6.dp))
+                Box(Modifier.width(28.dp).height(2.dp).background(if (selected) TextHi else Color.Transparent))
             }
         }
-        Spacer(Modifier.weight(1f))
+        if (ui.drivers.size < FamilySettings.MAX_MEMBERS) {
+            Text(
+                "+ 추가",
+                color = TextLow,
+                fontSize = 15.sp,
+                modifier = Modifier.clickable(enabled = parked) { vm.askNewMember() }.padding(horizontal = 14.dp, vertical = 16.dp),
+            )
+        }
+        Spacer(Modifier.width(16.dp))
         Text(
             if (ui.showTestPanel) "테스트 닫기" else "테스트",
             color = TextLow,
-            fontSize = 16.sp,
-            modifier = Modifier.clip(RoundedCornerShape(50)).clickable { vm.toggleTestPanel() }.padding(horizontal = 16.dp, vertical = 10.dp),
+            fontSize = 15.sp,
+            modifier = Modifier.clickable { vm.toggleTestPanel() }.padding(vertical = 16.dp, horizontal = 8.dp),
         )
     }
 }
 
-// ---- 최근 주차 위치 ----
+// ---- 마지막 주차 위치: 이 화면의 주인공 ----
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ParkingHero(card: ParkingCard?, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(28.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF16233B), Panel)))
-            .border(1.dp, Line, RoundedCornerShape(28.dp))
-            .padding(32.dp),
-    ) {
+private fun LastParking(card: ParkingCard?, carName: String, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth()) {
+        Label("마지막 주차 위치")
+        Spacer(Modifier.height(8.dp))
         if (card == null) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Eyebrow("최근 주차 위치")
-                Text("아직 기록이 없어요", color = TextHi, fontSize = 44.sp, fontWeight = FontWeight.Bold)
-                Text("주차하면 차가 먼저 물어봐요.", color = TextMid, fontSize = 22.sp)
-            }
-        } else {
-            Column(Modifier.fillMaxSize()) {
-                Eyebrow("최근 주차 위치")
-                Spacer(Modifier.height(10.dp))
-                // 가장 중요한 정보 하나를 가장 크게: 1~2초 안에 읽히도록.
-                Text(
-                    card.memo,
-                    color = TextHi,
-                    fontSize = 72.sp,
-                    lineHeight = 80.sp,
-                    fontWeight = FontWeight.Black,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(18.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(card.driver, 40.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Text("${card.driver}님이 주차", color = TextHi, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-                    Text("  ·  ${formatTime(card.parkedAtMillis)}", color = TextMid, fontSize = 22.sp)
-                }
-                Spacer(Modifier.weight(1f))
-                // 넘겨받는 사람이 알아야 할 것: 주차 당시 차 상태.
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    card.rangeKm?.let { Tag("주행 가능 ${it.toInt()}km", TextMid) }
-                    if (card.rangeKm == null) card.fuelPercent?.let { Tag("연료 $it%", TextMid) }
-                    card.issues.forEach { Tag(it.substringBefore(". ").trimEnd('.'), Yellow) }
-                    if (card.issues.isEmpty()) Tag("차 상태 이상 없음", Green)
-                }
-            }
+            Text("아직 기록이 없어요", fontSize = 64.sp, lineHeight = 72.sp, fontWeight = Heavy)
+            Spacer(Modifier.height(16.dp))
+            Text("주차하면 차가 먼저 물어봐요.", color = TextMid, fontSize = 22.sp)
+            return@Column
+        }
+        // 가장 중요한 정보 하나를 가장 크게: 1~2초 안에 읽히도록. 긴 메모는 한 단계 줄인다.
+        val big = card.memo.length <= 12
+        Text(
+            card.memo,
+            fontSize = if (big) 88.sp else 64.sp,
+            lineHeight = if (big) 96.sp else 72.sp,
+            fontWeight = Heavy,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${card.driver}님이 주차", fontSize = 22.sp, fontWeight = Semi)
+            Text("   ${formatTime(card.parkedAtMillis)}   ${card.car ?: carName}", color = TextMid, fontSize = 22.sp)
+        }
+        Spacer(Modifier.height(32.dp))
+        // 넘겨받는 사람이 알아야 할 것: 주차 당시 차 상태.
+        Label("넘겨받을 때")
+        Spacer(Modifier.height(12.dp))
+        // 한눈에 읽히도록 세 줄까지만 보여 준다.
+        val left = card.rangeKm?.let { "주행 가능 ${it.toInt()}km" } ?: card.fuelPercent?.let { "연료 $it%" }
+        if (card.issues.isEmpty()) Mark(Ok, listOfNotNull("차 상태 이상 없음", left).joinToString(" · "))
+        card.issues.take(3).forEachIndexed { i, issue ->
+            val more = if (i == 2 && card.issues.size > 3) " 외 ${card.issues.size - 3}건" else ""
+            val extra = if (i == 0 && left != null && IssueHistory.label(issue).startsWith("연료")) " · $left" else ""
+            Mark(Warn, IssueHistory.label(issue) + extra + more)
         }
     }
 }
 
+/** 색 점 하나와 한 줄 문장. 알약 모양 꼬리표 대신 쓴다. */
 @Composable
-private fun Eyebrow(text: String) {
-    Text(text, color = Blue, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-}
-
-@Composable
-private fun Tag(text: String, color: Color) {
-    Row(
-        Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.14f)).padding(horizontal = 16.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Dot(color, 8.dp)
-        Spacer(Modifier.width(8.dp))
-        Text(text, color = color, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+private fun Mark(color: Color, text: String) {
+    Row(Modifier.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(14.dp))
+        Text(text, fontSize = 22.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-@Composable
-private fun Dot(color: Color, size: Dp) {
-    Box(Modifier.size(size).clip(CircleShape).background(color))
-}
-
-@Composable
-private fun Avatar(name: String, size: Dp) {
-    Box(Modifier.size(size).clip(CircleShape).background(PanelHigh).border(1.dp, Line, CircleShape), contentAlignment = Alignment.Center) {
-        Text(name.take(1), color = TextHi, fontSize = (size.value * 0.45f).sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-// ---- 큰 버튼 ----
+// ---- 누르는 것 ----
 
 @Composable
 private fun Actions(car: CarState, vm: ChagokViewModel) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        BigButton("주차 위치 남기기", enabled = !car.isDriving, modifier = Modifier.weight(1f)) { vm.askParking() }
-        BigButton("탑승 브리핑 듣기", enabled = true, modifier = Modifier.weight(1f), primary = false) { vm.playBoardingBriefing() }
+        // 주 버튼은 화면에 하나.
+        PushButton("주차 위치 남기기", Modifier.weight(1.3f), primary = true, enabled = !car.isDriving) { vm.askParking() }
+        PushButton("탑승 브리핑", Modifier.weight(1f)) { vm.playBoardingBriefing() }
         // 누른 뒤에는 말로만 진행한다: "여기 다음에 오자", "그 빵집 안내해 줘".
-        BigButton("말하기", enabled = true, modifier = Modifier.weight(0.6f), primary = false) { vm.askCommand() }
+        PushButton("말하기", Modifier.weight(0.8f)) { vm.askCommand() }
     }
 }
 
-/** 한 손으로 누르기 쉬운 큰 버튼 (높이 96dp). */
+/** 한 손으로 누르기 쉬운 큰 버튼 (높이 88dp). 주 버튼은 아이보리, 보조 버튼은 선 테두리. */
 @Composable
-private fun BigButton(text: String, enabled: Boolean, modifier: Modifier = Modifier, primary: Boolean = true, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
-    val bg = when {
-        !enabled -> PanelHigh
-        primary -> Blue
-        else -> Panel
-    }
+private fun PushButton(text: String, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
     Box(
         modifier
-            .height(96.dp)
+            .height(88.dp)
             .clip(shape)
-            .background(bg)
-            .then(if (primary || !enabled) Modifier else Modifier.border(1.5.dp, Line, shape))
+            .then(if (primary && enabled) Modifier.background(TextHi) else Modifier.border(1.dp, Line, shape))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (enabled) Color.White else TextLow,
+            fontSize = 24.sp,
+            fontWeight = Semi,
+            maxLines = 1,
+            color = when {
+                !enabled -> TextLow
+                primary -> Bg
+                else -> TextHi
+            },
         )
     }
 }
 
-// ---- 차 상태 ----
+// ---- 오른쪽 칸: 지금 차 상태, 가족 장소, 이전 기록 ----
+
+/** 3단계 등급 한 줄. 색과 문구로 먼저 판단하게 한다. */
+@Composable
+private fun GradeHead(car: CarState) {
+    val grade = CheckRules.worst(CheckRules.drivingIssues(car) + CheckRules.exitIssues(car))
+    Label("지금 차 상태")
+    Spacer(Modifier.height(8.dp))
+    Text(gradeLabel(grade), color = gradeColor(grade), fontSize = 44.sp, lineHeight = 52.sp, fontWeight = Heavy, maxLines = 1)
+    Spacer(Modifier.height(16.dp))
+    Rule()
+}
 
 @Composable
-private fun CarStatus(car: CarState) {
-    val issues = CheckRules.drivingIssues(car) + CheckRules.exitIssues(car)
-    val grade = CheckRules.worst(issues)
-    val color = gradeColor(grade)
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Panel).border(1.dp, Line, RoundedCornerShape(28.dp)),
-    ) {
-        // 등급 띠: 색과 한 줄 문구로 먼저 판단하게 한다.
+private fun Side(ui: UiState, car: CarState, vm: ChagokViewModel) {
+    Line("기어", gearLabel(car.gear))
+    // 차량이 주지 않는 정보는 줄을 만들지 않는다.
+    car.rangeKm?.let { Line("주행 가능", "${it.toInt()}km", if (it <= CheckRules.LOW_RANGE_KM) Warn else null) }
+    car.fuelPercent?.let { Line("연료", "$it%", if (it <= CheckRules.LOW_FUEL_PERCENT) Warn else null) }
+    car.batteryPercent?.let { Line("배터리", "$it%", if (it <= CheckRules.LOW_BATTERY_PERCENT) Warn else null) }
+    Line("문", if (car.openDoors.isEmpty()) "닫힘" else "${car.openDoors.joinToString(", ")} 열림", if (car.openDoors.isEmpty()) null else Danger)
+    Line("창문", if (car.openWindows.isEmpty()) "닫힘" else "열림", if (car.openWindows.isEmpty()) null else Warn)
+    car.headlightOn?.let { Line("라이트", if (it) "켜짐" else "꺼짐", if (it) Warn else null) }
+    car.lowTirePressure?.let { Line("타이어", if (it) "공기압 낮음" else "정상", if (it) Warn else null) }
+    // 되풀이되는 이상: 가족이 함께 보고 정비소에서 보여 줄 근거.
+    IssueHistory.repeated(ui.cards, System.currentTimeMillis()).forEach {
+        Line("최근 2주", "${it.label} ${it.times}회", Warn)
+    }
+
+    Spacer(Modifier.height(40.dp))
+    Label("가족 장소")
+    Spacer(Modifier.height(12.dp))
+    Rule()
+    if (ui.pins.isEmpty()) Hint("“여기 다음에 오자”라고 말하면 저장돼요.")
+    ui.pins.take(5).forEach { pin ->
+        // 정차 중에는 눌러서, 주행 중에는 말로 길 안내를 부른다.
         Row(
-            Modifier.fillMaxWidth().background(color.copy(alpha = 0.14f)).padding(horizontal = 24.dp, vertical = 16.dp),
+            Modifier.fillMaxWidth().clickable(enabled = !car.isDriving) { vm.guideTo(pin) }.padding(vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Dot(color, 14.dp)
-            Spacer(Modifier.width(12.dp))
-            Text(gradeLabel(grade), color = color, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.weight(1f))
-            Text("차 상태", color = TextMid, fontSize = 16.sp)
-        }
-        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Stat("기어", gearLabel(car.gear), Modifier.weight(1f))
-                // 차량이 주지 않는 정보는 칸을 만들지 않는다.
-                car.rangeKm?.let { Stat("주행 가능", "${it.toInt()}", Modifier.weight(1f), unit = "km") }
-                (car.fuelPercent ?: car.batteryPercent)?.let {
-                    Stat(if (car.fuelPercent != null) "연료" else "배터리", "$it", Modifier.weight(1f), unit = "%", bar = it / 100f,
-                        barColor = if (it <= CheckRules.LOW_BATTERY_PERCENT) Yellow else Blue)
-                }
+            Column(Modifier.weight(1f)) {
+                Text(pin.name, fontSize = 22.sp, fontWeight = Semi, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${pin.savedBy}님이 저장", color = TextLow, fontSize = 15.sp)
             }
-            CheckRow("문", car.openDoors.isEmpty(), if (car.openDoors.isEmpty()) "닫힘" else "${car.openDoors.joinToString(", ")} 열림", Red)
-            CheckRow("창문", car.openWindows.isEmpty(), if (car.openWindows.isEmpty()) "닫힘" else "열림", Yellow)
-            car.headlightOn?.let { CheckRow("라이트", !it, if (it) "켜짐" else "꺼짐", Yellow) }
-            car.lowTirePressure?.let { CheckRow("타이어", !it, if (it) "공기압 낮음" else "정상", Yellow) }
+            Text("길 안내", color = if (car.isDriving) TextLow else TextHi, fontSize = 18.sp, fontWeight = Semi)
         }
+        Rule()
+    }
+
+    Spacer(Modifier.height(40.dp))
+    Label("이전 기록")
+    Spacer(Modifier.height(12.dp))
+    Rule()
+    val older = ui.cards.drop(1).take(6)
+    if (older.isEmpty()) Hint("주차할 때마다 여기에 쌓여요.")
+    older.forEach { c ->
+        Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(c.memo, fontSize = 22.sp, fontWeight = Semi, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(16.dp))
+            Text("${c.driver} · ${formatTime(c.parkedAtMillis)}", color = TextLow, fontSize = 15.sp, maxLines = 1)
+        }
+        Rule()
     }
 }
 
+/** 항목 이름과 값 한 줄. 이상이 있으면 값에만 상태 색을 쓴다. */
 @Composable
-private fun Stat(label: String, value: String, modifier: Modifier = Modifier, unit: String = "", bar: Float? = null, barColor: Color = Blue) {
-    Column(modifier.clip(RoundedCornerShape(18.dp)).background(PanelHigh).padding(horizontal = 18.dp, vertical = 14.dp)) {
-        Text(label, color = TextMid, fontSize = 15.sp)
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(value, color = TextHi, fontSize = 34.sp, fontWeight = FontWeight.Bold)
-            if (unit.isNotEmpty()) Text(" $unit", color = TextMid, fontSize = 18.sp, modifier = Modifier.padding(bottom = 6.dp))
-        }
-        if (bar != null) {
-            Spacer(Modifier.height(6.dp))
-            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(Line)) {
-                Box(Modifier.fillMaxWidth(bar.coerceIn(0f, 1f)).height(6.dp).clip(RoundedCornerShape(50)).background(barColor))
-            }
-        }
-    }
-}
-
-@Composable
-private fun CheckRow(label: String, ok: Boolean, value: String, alertColor: Color) {
-    val color = if (ok) Green else alertColor
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(26.dp).clip(CircleShape).background(color.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-            Text(if (ok) "✓" else "!", color = color, fontSize = 15.sp, fontWeight = FontWeight.Black)
-        }
-        Spacer(Modifier.width(12.dp))
+private fun Line(label: String, value: String, alert: Color? = null) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = TextMid, fontSize = 20.sp)
-        Spacer(Modifier.weight(1f))
-        Text(value, color = if (ok) TextHi else color, fontSize = 20.sp, fontWeight = if (ok) FontWeight.Normal else FontWeight.Bold)
+        Spacer(Modifier.width(24.dp))
+        Text(
+            value,
+            color = alert ?: TextHi,
+            fontSize = 22.sp,
+            fontWeight = if (alert != null) Heavy else Semi,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+        )
     }
+    Rule()
 }
-
-// ---- 가족 장소 ----
-
-/** "여기 다음에 오자"로 모은 장소. 정차 중에는 눌러서, 주행 중에는 말로 길 안내를 부른다. */
-@Composable
-private fun Places(pins: List<PlacePin>, driving: Boolean, vm: ChagokViewModel, modifier: Modifier = Modifier) {
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Panel).border(1.dp, Line, RoundedCornerShape(28.dp)).padding(24.dp),
-    ) {
-        Text("가족 장소", color = TextMid, fontSize = 16.sp)
-        if (pins.isEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            Text("“여기 다음에 오자”라고 말하면 저장돼요.", color = TextLow, fontSize = 18.sp)
-        }
-        LazyColumn(contentPadding = PaddingValues(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(pins, key = { it.id }) { pin ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(PanelHigh)
-                        .clickable(enabled = !driving) { vm.guideTo(pin) }
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(pin.name, color = TextHi, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("${pin.savedBy}님이 저장", color = TextLow, fontSize = 15.sp)
-                    }
-                    Text("안내", color = if (driving) TextLow else Blue, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-}
-
-// ---- 이전 기록 ----
 
 @Composable
-private fun History(cards: List<ParkingCard>, modifier: Modifier = Modifier) {
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Panel).border(1.dp, Line, RoundedCornerShape(28.dp)).padding(24.dp),
-    ) {
-        Text("이전 기록", color = TextMid, fontSize = 16.sp)
-        if (cards.isEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            Text("주차할 때마다 여기에 쌓여요.", color = TextLow, fontSize = 18.sp)
-        }
-        LazyColumn(contentPadding = PaddingValues(top = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            items(cards, key = { it.id }) { c ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(c.driver, 36.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Text(c.memo, color = TextHi, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.width(12.dp))
-                    Text(formatTime(c.parkedAtMillis), color = TextLow, fontSize = 16.sp)
-                }
-            }
-        }
-    }
-}
+private fun Hint(text: String) = Text(text, color = TextLow, fontSize = 18.sp, modifier = Modifier.padding(vertical = 16.dp))
 
 // ---- 차가 한 말 ----
 
 @Composable
-private fun SpokenBar(text: String) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Blue.copy(alpha = 0.14f)).padding(horizontal = 22.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        VoiceBars(Blue)
-        Spacer(Modifier.width(14.dp))
-        Text(text, color = TextHi, fontSize = 22.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+private fun Spoken(text: String) {
+    Rule()
+    Row(Modifier.fillMaxWidth().padding(vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+        VoiceBars(TextHi)
+        Spacer(Modifier.width(20.dp))
+        Text(text, fontSize = 24.sp, lineHeight = 32.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
 /** 음성 안내라는 표시. 주행 중 시선을 끌지 않도록 움직이지 않는 막대로 그린다. */
 @Composable
-private fun VoiceBars(color: Color) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun VoiceBars(color: Color, scale: Float = 1f) {
+    Row(horizontalArrangement = Arrangement.spacedBy((4 * scale).dp), verticalAlignment = Alignment.CenterVertically) {
         listOf(10, 22, 14, 26, 12).forEach { h ->
-            Box(Modifier.width(4.dp).height(h.dp).clip(RoundedCornerShape(50)).background(color))
+            Box(Modifier.width((4 * scale).dp).height((h * scale).dp).background(color))
         }
     }
 }
 
-// ---- 주차 질문 ----
+// ---- 차가 묻는 화면 ----
 
 /** 차가 묻고 대답을 기다리는 화면. 주행 중에는 입력칸 없이 음성으로만 받는다. */
 @Composable
-private fun AskOverlay(asking: Prompt.Asking, driving: Boolean, vm: ChagokViewModel) {
+private fun AskScreen(asking: Prompt.Asking, driving: Boolean, vm: ChagokViewModel) {
     var typed by remember(asking.question) { mutableStateOf("") }
-    Box(
-        Modifier.fillMaxSize().background(Color(0xE6050709)).clickable(enabled = false) {}.imePadding(),
-        contentAlignment = Alignment.Center,
-    ) {
+    val settings = asking.kind == Ask.CAR_NAME || asking.kind == Ask.MEMBER_NAME || asking.kind == Ask.COMMAND
+    Box(Modifier.fillMaxSize().background(Bg).clickable(enabled = false) {}.imePadding()) {
         Column(
-            Modifier
-                .widthIn(max = 820.dp)
-                .padding(24.dp)
-                .clip(RoundedCornerShape(32.dp))
-                .background(Panel)
-                .border(1.dp, Line, RoundedCornerShape(32.dp))
-                .padding(40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 64.dp, vertical = 48.dp).widthIn(max = 960.dp),
         ) {
-            // 듣는 중임을 알리는 원
-            Box(
-                Modifier.size(88.dp).clip(CircleShape).background(Blue.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(Modifier.size(60.dp).clip(CircleShape).background(Blue), contentAlignment = Alignment.Center) {
-                    VoiceBars(Color.White)
-                }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                VoiceBars(TextHi, scale = 1.4f)
+                Spacer(Modifier.width(20.dp))
+                Text(if (asking.listening) "듣고 있어요" else "말씀하시거나 아래에 입력해 주세요", color = TextMid, fontSize = 20.sp)
             }
-            Text(asking.question, color = TextHi, fontSize = 44.sp, fontWeight = FontWeight.Bold)
-            if (asking.heard.isNotEmpty()) {
-                Text("“${asking.heard}”", color = Blue, fontSize = 32.sp, fontWeight = FontWeight.SemiBold)
-            } else {
-                Text(
-                    if (asking.listening) "듣고 있어요" else "말씀하시거나 아래에 입력해 주세요",
-                    color = TextMid,
-                    fontSize = 24.sp,
-                )
-                Text(askHint(asking), color = TextLow, fontSize = 20.sp)
-            }
+            Spacer(Modifier.height(32.dp))
+            Text(asking.question, fontSize = 56.sp, lineHeight = 68.sp, fontWeight = Heavy)
+            Spacer(Modifier.height(16.dp))
+            if (asking.heard.isNotEmpty()) Text("“${asking.heard}”", fontSize = 36.sp, lineHeight = 44.sp, fontWeight = Semi)
+            else Text(askHint(asking), color = TextLow, fontSize = 22.sp)
+
             if (!driving) {
+                Spacer(Modifier.height(40.dp))
                 // 평소 자리를 제안했을 때는 한 번 눌러서도 끝낼 수 있다.
                 if (asking.suggestion != null) {
-                    BigButton("응, 맞아요", enabled = true, modifier = Modifier.fillMaxWidth()) { vm.onAnswer("응") }
+                    PushButton("응, 맞아요", Modifier.fillMaxWidth(), primary = true) { vm.onAnswer("응") }
+                    Spacer(Modifier.height(24.dp))
                 }
-                OutlinedTextField(
+                // 밑줄만 있는 입력칸. 키보드가 버튼을 가려도 완료 키로 바로 저장할 수 있다.
+                BasicTextField(
                     value = typed,
                     onValueChange = { typed = it },
                     singleLine = true,
-                    textStyle = TextStyle(fontSize = 24.sp, color = TextHi),
-                    placeholder = { Text("직접 입력", fontSize = 24.sp, color = TextLow) },
-                    shape = RoundedCornerShape(18.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Blue,
-                        unfocusedBorderColor = Line,
-                        focusedContainerColor = PanelHigh,
-                        unfocusedContainerColor = PanelHigh,
-                    ),
-                    // 키보드가 버튼을 가려도 완료 키로 바로 저장할 수 있게 한다.
+                    textStyle = TextStyle(fontFamily = Asta, fontSize = 28.sp, color = TextHi, fontWeight = Semi),
+                    cursorBrush = SolidColor(TextHi),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { if (typed.isNotBlank()) vm.onAnswer(typed) }),
                     modifier = Modifier.fillMaxWidth(),
+                    decorationBox = { field ->
+                        Column {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
+                                if (typed.isEmpty()) Text("직접 입력", color = TextLow, fontSize = 28.sp)
+                                field()
+                            }
+                            Box(Modifier.fillMaxWidth().height(2.dp).background(if (typed.isEmpty()) Line else TextHi))
+                        }
+                    },
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    BigButton(if (asking.kind == Ask.COMMAND) "닫기" else "안 남길게요", enabled = true, modifier = Modifier.weight(1f), primary = false) { vm.cancelPrompt() }
-                    BigButton(if (asking.kind == Ask.COMMAND) "확인" else "저장", enabled = typed.isNotBlank(), modifier = Modifier.weight(1f)) { vm.onAnswer(typed) }
+                Spacer(Modifier.height(32.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    PushButton(if (settings) "닫기" else "안 남길게요", Modifier.weight(1f)) { vm.cancelPrompt() }
+                    PushButton(
+                        if (asking.kind == Ask.COMMAND) "확인" else "저장",
+                        Modifier.weight(1f),
+                        primary = asking.suggestion == null,
+                        enabled = typed.isNotBlank(),
+                    ) { vm.onAnswer(typed) }
                 }
             }
         }
     }
+}
+
+private fun askHint(asking: Prompt.Asking) = when (asking.kind) {
+    Ask.PARKING -> if (asking.suggestion != null) "“응”이라고 하거나, 다른 자리면 그대로 말해 주세요" else "예: “지하 2층 B구역 기둥 14”"
+    Ask.PARKING_WHERE -> "예: “지하 2층 B구역 기둥 14”"
+    Ask.COMMAND -> "예: “여기 다음에 오자”, “그 빵집 안내해 줘”"
+    Ask.PLACE_NAME -> "예: “성심당 빵집”"
+    Ask.CAR_NAME -> "예: “엄마 차”, “흰색 SUV”. 집에 차가 여러 대일 때 구분하는 이름이에요"
+    Ask.MEMBER_NAME -> "예: “아들”, “할머니”"
 }
 
 // ---- 테스트 패널 ----
@@ -535,12 +482,13 @@ private fun AskOverlay(asking: Prompt.Asking, driving: Boolean, vm: ChagokViewMo
 /** 실제 차량 없이 흐름을 확인하는 패널. (Pleos 에뮬레이터에서는 차량 제어판 값이 그대로 들어온다.) */
 @Composable
 private fun TestPanel(car: CarState, testPlace: String?, vm: ChagokViewModel) {
+    Rule()
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).horizontalScroll(rememberScrollState()).padding(10.dp),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("테스트", color = TextLow, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 8.dp))
+        Text("테스트", color = TextLow, fontSize = 15.sp, modifier = Modifier.padding(end = 8.dp))
         listOf(Gear.PARK to "P", Gear.REVERSE to "R", Gear.NEUTRAL to "N", Gear.DRIVE to "D").forEach { (g, label) ->
             TestChip("기어 $label", car.gear == g) { vm.testGear(g) }
         }
@@ -562,23 +510,18 @@ private fun TestPanel(car: CarState, testPlace: String?, vm: ChagokViewModel) {
 
 @Composable
 private fun TestChip(text: String, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
     Text(
         text,
-        color = if (selected) Color.White else TextMid,
-        fontSize = 16.sp,
+        color = if (selected) Bg else TextMid,
+        fontSize = 15.sp,
+        fontWeight = if (selected) Semi else Regular,
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (selected) Blue.copy(alpha = 0.55f) else PanelHigh)
+            .clip(shape)
+            .then(if (selected) Modifier.background(TextHi) else Modifier.border(1.dp, Line, shape))
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
     )
-}
-
-private fun askHint(asking: Prompt.Asking) = when (asking.kind) {
-    Ask.PARKING -> if (asking.suggestion != null) "“응”이라고 하거나, 다른 자리면 그대로 말해 주세요" else "예: “지하 2층 B구역 기둥 14”"
-    Ask.PARKING_WHERE -> "예: “지하 2층 B구역 기둥 14”"
-    Ask.COMMAND -> "예: “여기 다음에 오자”, “그 빵집 안내해 줘”"
-    Ask.PLACE_NAME -> "예: “성심당 빵집”"
 }
 
 private fun gearLabel(g: Gear) = when (g) {

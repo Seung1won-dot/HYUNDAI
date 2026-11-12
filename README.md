@@ -85,6 +85,8 @@ Android Studio에서 이 저장소 폴더를 열고 실행(▶)하거나, 터미
 | 운전 중 상태 이상 음성 한 줄 안내 | ✅ |
 | 자주 가는 주차장: 평소 자리를 먼저 제안, "응" 한마디로 기록 | ✅ |
 | 음성 장소 핀("여기 다음에 오자") 저장, 저장한 장소로 길 안내 요청(NaviHelper) | ✅ |
+| 차 이름·가족 구성 설정 (집에 차가 여러 대일 때 구분, 운전자 추가) | ✅ |
+| 되풀이되는 이상 기록 ("최근 2주 타이어 공기압 2회") | ✅ |
 | 원본 음성 보관, 건물명 자동 인식 | 🚧 2단계 |
 | 가족 연결(QR·웹앱) | 🚧 2단계 |
 
@@ -96,8 +98,9 @@ Android Studio에서 이 저장소 폴더를 열고 실행(▶)하거나, 터미
 
 | 항목 | 버전 / 내용 |
 |---|---|
-| 실행 환경 | Pleos Connect Emulator 2.1.0 (Android 14, API 34) |
-| 화면 규격 | 가로 화면 기준 (에뮬레이터 검증 후 해상도 기재 예정) |
+| 실행 환경 | Pleos Connect Emulator 2.1.0 (Android 14, API 34) 대상. 현재까지는 Android 14(API 34) 일반 에뮬레이터에서 확인 |
+| 화면 규격 | 가로·세로(분할 화면) 모두 지원. 2560×1600 가로, 1600×2560 세로(320dpi)에서 확인 |
+| 글꼴 | Asta Sans (Pleos Connect 디자인 가이드 지정, SIL OFL) |
 | Pleos SDK | Vehicle 2.3.2, SpeechToText 3.3.1, TextToSpeech 3.3.1, FusedLocation 1.1.3, NaviHelper 3.0.5 |
 | 최소 Android API | 28 이상 |
 | 개발 언어 | Kotlin |
@@ -120,7 +123,7 @@ Android Studio에서 이 저장소 폴더를 열고 실행(▶)하거나, 터미
 
 ```
 ├── README.md
-├── docs/        기획 문서, 화면 시안, 시나리오
+├── docs/        기획 문서, 화면 시안, 디자인 기준(docs/design/DESIGN.md)
 ├── ideas/       아이디어 공유
 ├── apk/         release APK
 ├── web/         가족 웹앱 (PWA)

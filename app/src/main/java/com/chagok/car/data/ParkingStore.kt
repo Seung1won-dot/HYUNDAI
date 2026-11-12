@@ -34,6 +34,7 @@ class ParkingStore(private val file: File) {
         put("id", c.id)
         put("memo", c.memo)
         put("driver", c.driver)
+        putOpt("car", c.car)
         put("parkedAt", c.parkedAtMillis)
         putOpt("lat", c.latitude)
         putOpt("lng", c.longitude)
@@ -49,6 +50,7 @@ class ParkingStore(private val file: File) {
         id = o.getString("id"),
         memo = o.getString("memo"),
         driver = o.getString("driver"),
+        car = if (o.has("car")) o.getString("car") else null,
         parkedAtMillis = o.getLong("parkedAt"),
         latitude = if (o.has("lat")) o.getDouble("lat") else null,
         longitude = if (o.has("lng")) o.getDouble("lng") else null,

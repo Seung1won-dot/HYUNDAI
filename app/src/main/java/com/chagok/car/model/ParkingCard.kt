@@ -15,4 +15,6 @@ data class ParkingCard(
     val rangeKm: Float? = null,
     val odometerKm: Float? = null,
     val issues: List<String> = emptyList(),
+    /** 어느 차의 기록인지 (집에 차가 여러 대일 때 구분). */
+    val car: String? = null,
 )

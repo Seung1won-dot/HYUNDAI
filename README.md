@@ -8,6 +8,20 @@
 
 ---
 
+## 📸 실행 화면
+
+Pleos Connect Emulator 2.1.0에서 실제로 실행한 화면입니다. (2560×1440, 2026-11-12 캡처)
+
+| ① 주차하면 차가 먼저 묻기 | ② 다음 운전자에게 남긴 쪽지 |
+|---|---|
+| <img src="docs/screenshots/1_parking_ask.png" width="440" alt="기어를 P단에 두면 차가 주차 위치를 남길지 묻는 화면"> | <img src="docs/screenshots/2_handover_note.png" width="440" alt="앞 운전자가 남긴 주차 위치 B2 C-14, 한마디, 차 상태 등급이 보이는 쪽지 화면"> |
+| 기어를 **P단**에 두면 "주차 위치를 남길까요?"라고 묻고 음성으로 받아 적습니다. 음성이 안 될 때는 직접 입력합니다. | 주차 위치 **B2 C-14**, 한마디("트렁크에 수박 있어"), 차 상태와 **3단계 등급**(가까운 곳에서 조치)을 한 장의 쪽지로 보여줍니다. |
+| **③ 주행 중** | **④ 음성 장소 핀 → 길 안내** |
+| <img src="docs/screenshots/3_driving.png" width="440" alt="주행 중 쪽지와 차 상태를 보여주는 화면"> | <img src="docs/screenshots/4_place_navi.png" width="440" alt="저장한 빵집으로 내비 길 안내가 시작된 화면"> |
+| 기어가 **D단**이면 화면 조작 버튼을 막고, 상태 이상은 음성 한 줄로만 안내합니다. | "그 빵집 안내해 줘"라고 말하면 **NaviHelper SDK**로 저장한 장소 길 안내가 시작됩니다. |
+
+---
+
 ## 📌 앱 소개
 
 차 한 대를 여러 사람이 나눠 쓰는 가정에서는 "차 어디에 댔어?", "기름 남아 있어?"라는 질문이 반복됩니다.
@@ -109,9 +123,9 @@ Android Studio에서 이 저장소 폴더를 열고 실행(▶)하거나, 터미
 | TextToSpeech | 주차 질문, 저장 확인, 탑승 브리핑을 차량 음성으로 재생 |
 | SpeechToText | P단 진입 뒤 듣기 시작, 말이 없으면 10초 뒤 종료하고 직접 입력으로 전환. 실제 발화 인식 결과는 마이크 연결 후 확인 예정 |
 | FusedLocation | 권한 허용 뒤 주차 좌표 수신 |
-| NaviHelper | 저장한 장소로 길 안내 요청 → 내비가 경로 안내 시작 ([캡처](docs/design/pleos_navi.png)) |
+| NaviHelper | 저장한 장소로 길 안내 요청 → 내비가 경로 안내 시작 ([캡처](docs/screenshots/4_place_navi.png)) |
 
-화면 캡처: [앞 운전자가 남긴 쪽지](docs/design/pleos_main.png) · [주행 중](docs/design/pleos_driving.png) · [차가 먼저 묻는 화면](docs/design/pleos_ask.png)
+화면 캡처는 위 [📸 실행 화면](#-실행-화면)과 [docs/screenshots](docs/screenshots/) 폴더에 있습니다.
 
 ---
 
